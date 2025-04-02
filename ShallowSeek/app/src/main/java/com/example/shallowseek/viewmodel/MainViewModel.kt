@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.shallowseek.data.ApiResponse
+import com.example.shallowseek.data.ModelInfo
 import com.example.shallowseek.repository.ApiRepository
 import kotlinx.coroutines.launch
 
@@ -34,6 +35,21 @@ class MainViewModel : ViewModel() {
     var serverAddress by mutableStateOf(repository.getServerAddress())
         private set
     
+    // Model selection state
+    var availableModels by mutableStateOf<List<ModelInfo>>(emptyList())
+        private set
+        
+    var selectedModel by mutableStateOf<String?>(null)
+        private set
+        
+    var isLoadingModels by mutableStateOf(false)
+        private set
+    
+    init {
+        // Load models on initialization
+        loadModels()
+    }
+    
     /**
      * Update the user's prompt text.
      * 
@@ -57,7 +73,7 @@ class MainViewModel : ViewModel() {
         
         viewModelScope.launch {
             try {
-                val result = repository.generateText(promptText)
+                val result = repository.generateText(promptText, model = selectedModel)
                 
                 result.fold(
                     onSuccess = { response ->
@@ -73,6 +89,47 @@ class MainViewModel : ViewModel() {
                 isLoading = false
             }
         }
+    }
+    
+    /**
+     * Load available models from the server.
+     */
+    fun loadModels() {
+        isLoadingModels = true
+        errorMessage = null
+        
+        viewModelScope.launch {
+            try {
+                val result = repository.getModels()
+                
+                result.fold(
+                    onSuccess = { response ->
+                        availableModels = response.models
+                        
+                        // If no model is selected yet, select the first one
+                        if (selectedModel == null && availableModels.isNotEmpty()) {
+                            selectedModel = availableModels.first().name
+                        }
+                    },
+                    onFailure = { error ->
+                        handleError(error)
+                    }
+                )
+            } catch (e: Exception) {
+                handleError(e)
+            } finally {
+                isLoadingModels = false
+            }
+        }
+    }
+    
+    /**
+     * Update the selected model.
+     * 
+     * @param modelName The name of the selected model
+     */
+    fun selectModel(modelName: String) {
+        selectedModel = modelName
     }
     
     /**
@@ -101,6 +158,9 @@ class MainViewModel : ViewModel() {
     fun updateServerAddress(address: String) {
         repository.setServerAddress(address)
         serverAddress = repository.getServerAddress()
+        
+        // Reload models when the server address changes
+        loadModels()
     }
     
     /**

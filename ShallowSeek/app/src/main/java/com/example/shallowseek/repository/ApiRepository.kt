@@ -2,6 +2,7 @@ package com.example.shallowseek.repository
 
 import com.example.shallowseek.data.ApiRequest
 import com.example.shallowseek.data.ApiResponse
+import com.example.shallowseek.data.ModelsResponse
 import com.example.shallowseek.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,13 +21,41 @@ class ApiRepository {
      * 
      * @param prompt The user's input prompt
      * @param systemPrompt Optional system prompt for context
+     * @param model Optional model name to use (e.g., "deepseek-r1:1.5b")
      * @return Result containing either the API response or an error
      */
-    suspend fun generateText(prompt: String, systemPrompt: String? = null): Result<ApiResponse> {
+    suspend fun generateText(
+        prompt: String, 
+        systemPrompt: String? = null,
+        model: String? = null
+    ): Result<ApiResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                val request = ApiRequest(prompt, systemPrompt)
+                val request = ApiRequest(prompt, systemPrompt, model)
                 val response = apiService.generateText(request)
+                
+                if (response.isSuccessful) {
+                    response.body()?.let {
+                        Result.success(it)
+                    } ?: Result.failure(Exception("Empty response"))
+                } else {
+                    Result.failure(Exception("API error: ${response.code()} ${response.message()}"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+    
+    /**
+     * Get the list of available models from Ollama.
+     * 
+     * @return Result containing either the models response or an error
+     */
+    suspend fun getModels(): Result<ModelsResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.getModels()
                 
                 if (response.isSuccessful) {
                     response.body()?.let {

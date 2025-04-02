@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.shallowseek.ui.components.LoadingIndicator
+import com.example.shallowseek.ui.components.ModelSelector
 import com.example.shallowseek.ui.components.PromptInput
 import com.example.shallowseek.ui.components.ResponseDisplay
 import com.example.shallowseek.ui.components.ServerAddressInput
@@ -37,7 +38,7 @@ import com.example.shallowseek.viewmodel.MainViewModel
  * Main screen of the ShallowSeek app.
  * 
  * This composable displays the complete UI with server configuration,
- * prompt input, and response display areas.
+ * model selection, prompt input, and response display areas.
  * 
  * @param viewModel The ViewModel that manages the state and business logic
  */
@@ -81,12 +82,23 @@ fun MainScreen(viewModel: MainViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Server configuration (shown/hidden)
+            // Settings area (shown/hidden)
             if (showSettings) {
+                // Server configuration
                 ServerAddressInput(
                     currentAddress = viewModel.serverAddress,
                     onAddressChange = { viewModel.updateServerAddress(it) }
                 )
+                
+                // Model selection
+                ModelSelector(
+                    models = viewModel.availableModels,
+                    selectedModel = viewModel.selectedModel,
+                    onModelSelected = { viewModel.selectModel(it) },
+                    onRefreshModels = { viewModel.loadModels() },
+                    isLoading = viewModel.isLoadingModels
+                )
+                
                 Divider()
             }
             
