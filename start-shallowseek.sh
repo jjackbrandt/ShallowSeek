@@ -136,5 +136,5 @@ echo -e "4. If using a physical device, update the server address to ${CYAN}http
 echo -e "${YELLOW}Server logs:${NC}"
 echo -e "${CYAN}(Press Ctrl+C to stop the server)${NC}\n"
 
-# Wait for the server process to end
+# Wait for the server process to end.
 wait $SERVER_PID
