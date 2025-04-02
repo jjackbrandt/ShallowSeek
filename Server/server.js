@@ -29,34 +29,34 @@ app.use((req, res, next) => {
  */
 app.post('/generate', async (req, res) => {
   const { prompt, system } = req.body;
-  
+
   if (!prompt) {
     return res.status(400).json({ error: 'Prompt is required' });
   }
 
   console.log(`Processing prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
-  
+
   try {
     // Configure request to Ollama
     const ollamaRequest = {
-      model: 'deepseek',
+      model: 'deepseek-r1:1.5b',
       prompt: prompt,
       system: system || '',
       stream: false
     };
 
     console.log('Sending request to Ollama API...');
-    
+
     // Forward request to Ollama
     const response = await axios.post(OLLAMA_API, ollamaRequest);
-    
+
     console.log('Received response from Ollama');
-    
+
     // Return the Ollama response
     return res.json(response.data);
   } catch (error) {
     console.error('Error communicating with Ollama:', error.message);
-    
+
     // Detailed error logging
     if (error.response) {
       console.error('Response status:', error.response.status);
@@ -64,8 +64,8 @@ app.post('/generate', async (req, res) => {
     } else if (error.request) {
       console.error('No response received');
     }
-    
-    return res.status(500).json({ 
+
+    return res.status(500).json({
       error: 'Failed to communicate with Ollama',
       details: error.message
     });
