@@ -10,14 +10,16 @@ NC='\033[0m' # No Color
 
 # Print banner
 echo -e "${BLUE}"
-echo "  _____ _           _ _               _____          _    "
-echo " / ____| |         | | |             / ____|        | |   "
-echo "| (___ | |__   __ _| | | _____      | (___   ___  ___| | __"
-echo " \___ \| '_ \ / _\` | | |/ / _ \      \___ \ / _ \/ _ \ |/ /"
-echo " ____) | | | | (_| | |   < (_) |     ____) |  __/  __/   < "
-echo "|_____/|_| |_|\__,_|_|_|\_\___/     |_____/ \___|\___|_|\_\\"
+cat << 'EOF'
+  _________.__           .__  .__                  ___________________________________  __.
+ /   _____/|  |__ _____  |  | |  |   ______  _  __/   _____/\_   _____/\_   _____/    |/ _|
+ \_____  \ |  |  \\__  \ |  | |  |  /  _ \ \/ \/ /\_____  \  |    __)_  |    __)_|      <
+ /        \|   Y  \/ __ \|  |_|  |_(  <_> )     / /        \ |        \ |        \    |  \
+/_______  /|___|  (____  /____/____/\____/ \/\_/ /_______  //_______  //_______  /____|__ \
+        \/      \/     \/                                \/         \/         \/        \/
+EOF
 echo -e "${NC}"
-echo -e "${CYAN}Auburn University Honors Contracting Project${NC}\n"
+echo -e "${CYAN}Honors Contracting Project${NC}\n"
 
 # Function to check if a command exists
 command_exists() {
@@ -43,7 +45,7 @@ echo -e "${YELLOW}Checking if Ollama is running...${NC}"
 if ! curl -s http://localhost:11434/api/tags &> /dev/null; then
     echo -e "${YELLOW}Starting Ollama...${NC}"
     open -a Ollama
-    
+
     # Wait for Ollama to start
     echo -e "Waiting for Ollama to initialize..."
     for i in {1..30}; do
@@ -51,13 +53,13 @@ if ! curl -s http://localhost:11434/api/tags &> /dev/null; then
             echo -e "${GREEN}Ollama is now running!${NC}"
             break
         fi
-        
+
         if [ $i -eq 30 ]; then
             echo -e "${RED}Timed out waiting for Ollama to start.${NC}"
             echo -e "Please start Ollama manually and try again."
             exit 1
         fi
-        
+
         sleep 1
         echo -n "."
     done
