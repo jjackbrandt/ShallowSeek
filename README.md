@@ -34,7 +34,7 @@ This project combines modern Android development practices with a lightweight ba
 
 ```bash
 git clone https://github.com/jjackbrandt/ShallowSeek/
-cd honors-contracting
+cd ShallowSeek
 ```
 
 2. **Server Setup**
