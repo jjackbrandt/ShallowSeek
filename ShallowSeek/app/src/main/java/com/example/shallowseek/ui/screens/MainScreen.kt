@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Settings
@@ -26,19 +28,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.shallowseek.ui.components.LoadingIndicator
 import com.example.shallowseek.ui.components.ModelSelector
 import com.example.shallowseek.ui.components.PromptInput
 import com.example.shallowseek.ui.components.ResponseDisplay
 import com.example.shallowseek.ui.components.ServerAddressInput
+import com.example.shallowseek.ui.components.ThemeSelector
 import com.example.shallowseek.viewmodel.MainViewModel
 
 /**
  * Main screen of the ShallowSeek app.
  * 
  * This composable displays the complete UI with server configuration,
- * model selection, prompt input, and response display areas.
+ * model selection, theme selection, prompt input, and response display areas.
  * 
  * @param viewModel The ViewModel that manages the state and business logic
  */
@@ -47,6 +51,8 @@ import com.example.shallowseek.viewmodel.MainViewModel
 fun MainScreen(viewModel: MainViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showSettings by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scrollState = rememberScrollState()
     
     // Show error messages as snackbars
     LaunchedEffect(viewModel.errorMessage) {
@@ -84,20 +90,36 @@ fun MainScreen(viewModel: MainViewModel) {
         ) {
             // Settings area (shown/hidden)
             if (showSettings) {
-                // Server configuration
-                ServerAddressInput(
-                    currentAddress = viewModel.serverAddress,
-                    onAddressChange = { viewModel.updateServerAddress(it) }
-                )
-                
-                // Model selection
-                ModelSelector(
-                    models = viewModel.availableModels,
-                    selectedModel = viewModel.selectedModel,
-                    onModelSelected = { viewModel.selectModel(it) },
-                    onRefreshModels = { viewModel.loadModels() },
-                    isLoading = viewModel.isLoadingModels
-                )
+                Column(
+                    modifier = Modifier
+                        .weight(0.5f)
+                        .verticalScroll(scrollState)
+                ) {
+                    // Theme selector
+                    ThemeSelector(
+                        selectedTheme = viewModel.selectedTheme,
+                        onThemeSelected = { theme -> viewModel.updateTheme(theme, context) }
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    // Server configuration
+                    ServerAddressInput(
+                        currentAddress = viewModel.serverAddress,
+                        onAddressChange = { viewModel.updateServerAddress(it) }
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    // Model selection
+                    ModelSelector(
+                        models = viewModel.availableModels,
+                        selectedModel = viewModel.selectedModel,
+                        onModelSelected = { viewModel.selectModel(it) },
+                        onRefreshModels = { viewModel.loadModels() },
+                        isLoading = viewModel.isLoadingModels
+                    )
+                }
                 
                 Divider()
             }
@@ -105,7 +127,7 @@ fun MainScreen(viewModel: MainViewModel) {
             // Response area (expands to fill available space)
             ResponseDisplay(
                 response = viewModel.responseText,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(if (showSettings) 0.5f else 1f)
             )
             
             // Loading indicator (shown only when loading)

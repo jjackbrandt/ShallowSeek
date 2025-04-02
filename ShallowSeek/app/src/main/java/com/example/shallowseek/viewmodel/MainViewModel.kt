@@ -1,5 +1,6 @@
 package com.example.shallowseek.viewmodel
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -8,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.shallowseek.data.ApiResponse
 import com.example.shallowseek.data.ModelInfo
 import com.example.shallowseek.repository.ApiRepository
+import com.example.shallowseek.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 /**
@@ -45,9 +47,45 @@ class MainViewModel : ViewModel() {
     var isLoadingModels by mutableStateOf(false)
         private set
     
+    // Theme state
+    var selectedTheme by mutableStateOf(AppTheme.SYSTEM)
+        private set
+    
     init {
         // Load models on initialization
         loadModels()
+    }
+    
+    /**
+     * Load saved theme preference from SharedPreferences.
+     * 
+     * @param context The application context
+     */
+    fun loadThemePreference(context: Context) {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        val themeOrdinal = prefs.getInt("selected_theme", AppTheme.SYSTEM.ordinal)
+        selectedTheme = AppTheme.fromOrdinal(themeOrdinal)
+    }
+    
+    /**
+     * Save theme preference to SharedPreferences.
+     * 
+     * @param context The application context
+     */
+    private fun saveThemePreference(context: Context) {
+        val prefs = context.getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
+        prefs.edit().putInt("selected_theme", selectedTheme.ordinal).apply()
+    }
+    
+    /**
+     * Update the app theme.
+     * 
+     * @param theme The new theme
+     * @param context The application context for saving preference
+     */
+    fun updateTheme(theme: AppTheme, context: Context) {
+        selectedTheme = theme
+        saveThemePreference(context)
     }
     
     /**
