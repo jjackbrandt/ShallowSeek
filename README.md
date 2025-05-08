@@ -17,6 +17,7 @@ This project combines modern Android development practices with a lightweight ba
 - 🔄 **Model Selection**: Choose from all available Ollama models
 - 🎨 **Theme Customization**: Multiple built-in themes including Light, Dark, Dracula, Material Deep Ocean, and more
 - 🌐 **Configurable Server**: Connect to your Node.js server wherever it's running
+- 🔒 **SSH Tunneling**: Securely connect to your server over SSH, including GitHub SSH support
 - 💬 **Text Generation**: Send prompts and receive responses from Ollama models
 - 🚀 **Responsive UI**: Clean, modern interface that adapts to your theme preference
 
@@ -80,10 +81,45 @@ This script will:
 
 1. Launch the Android app on your device/emulator
 2. The app will connect to the Node.js server (default is `http://10.0.2.2:3000/` for emulator)
-3. If using a physical device, update the server address in the settings menu
+3. If using a physical device, you have two connection options:
+   - Direct connection: Update the server address in the settings menu to your server's IP address
+   - SSH tunnel: Set up an SSH tunnel by tapping the expand arrow next to "SSH Tunnel" and choosing a connection method
 4. Select your preferred model from the model picker
 5. Choose your favorite theme from the theme section in settings
 6. Enter prompts in the input field and tap Send
+
+### SSH Connection Options
+
+#### Standard SSH Connection
+This option lets you connect to your server using standard SSH credentials:
+
+1. In the Server Configuration section, tap the expand arrow next to "SSH Tunnel"
+2. Tap "Connect via SSH"
+3. Enter your SSH server details:
+   - SSH Host: Your SSH server hostname or IP address
+   - SSH Port: Usually 22 (default SSH port)
+   - Username: Your SSH username
+   - Password or Private Key: Choose your authentication method
+4. Configure port forwarding:
+   - Local Port: The port on your Android device (usually 3000)
+   - Remote Host: The hostname your server needs to connect to (usually localhost)
+   - Remote Port: The port your ShallowSeek server is running on (usually 3000)
+5. Tap "Connect" to establish the tunnel
+
+#### GitHub SSH Connection
+This option lets you use your GitHub SSH credentials:
+
+1. In the Server Configuration section, tap the expand arrow next to "SSH Tunnel"
+2. Tap "Connect via GitHub SSH" 
+3. Enter your GitHub details:
+   - GitHub Username: Your GitHub username
+   - SSH Key Path: Path to your SSH key (defaults to ~/.ssh/id_rsa)
+   - Passphrase: Your SSH key passphrase (if needed)
+4. Configure port forwarding:
+   - Local Port: The port on your Android device (usually 3000)
+   - Remote Host: The hostname your server needs to connect to (usually localhost)
+   - Remote Port: The port your ShallowSeek server is running on (usually 3000)
+5. Tap "Connect" to establish the tunnel through GitHub's SSH servers
 
 ## Architecture
 
