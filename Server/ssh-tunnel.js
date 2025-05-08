@@ -65,6 +65,15 @@ class SSHTunnel {
 
       this.sshClient.on('error', (err) => {
         console.error('SSH connection error:', err);
+        console.error('Error details:', {
+          message: err.message,
+          code: err.code,
+          level: err.level,
+          host: this.config.host,
+          port: this.config.port,
+          username: this.config.username,
+          authMethod: this.config.password ? 'password' : 'privateKey'
+        });
         this.isConnected = false;
         reject(err);
       });
@@ -80,7 +89,14 @@ class SSHTunnel {
       });
 
       try {
-        this.sshClient.connect(this.config);
+        // Add shorter connection timeout (15 seconds)
+        const configWithTimeout = {
+          ...this.config,
+          readyTimeout: 15000, // 15 seconds timeout (default is 20-30 seconds)
+          keepaliveInterval: 5000, // Send keep-alive every 5 seconds
+          keepaliveCountMax: 3 // Disconnect after 3 failed keep-alives
+        };
+        this.sshClient.connect(configWithTimeout);
       } catch (err) {
         reject(err);
       }
@@ -219,9 +235,22 @@ class SSHTunnel {
     // Resolve path with home directory if necessary
     const expandedPath = sshKeyPath.replace(/^~/, os.homedir());
     
+    console.log('GitHub SSH Connection Request:');
+    console.log(`- GitHub Username: ${githubUsername}`);
+    console.log(`- SSH Key Path: ${sshKeyPath}`);
+    console.log(`- Expanded Path: ${expandedPath}`);
+    console.log(`- Tunnel: localhost:${localPort} -> ${remoteHost}:${remotePort}`);
+    
     try {
+      // Check if file exists
+      if (!fs.existsSync(expandedPath)) {
+        console.error(`SSH key file not found at path: ${expandedPath}`);
+        throw new Error(`SSH key not found at ${expandedPath}`);
+      }
+      
       // Read the private key
       const privateKey = fs.readFileSync(expandedPath, 'utf8');
+      console.log(`- SSH Key loaded (${privateKey.length} bytes)`);
       
       // Create a new tunnel instance
       const tunnel = new SSHTunnel();
@@ -235,15 +264,27 @@ class SSHTunnel {
         passphrase: passphrase
       });
       
+      console.log('- Attempting to connect to GitHub SSH server (ssh.github.com)');
+      
       // Connect to SSH server
       await tunnel.connect();
+      
+      console.log('- Successfully connected to GitHub SSH');
+      console.log(`- Creating tunnel: localhost:${localPort} -> ${remoteHost}:${remotePort}`);
       
       // Create the tunnel
       await tunnel.createTunnel(localPort, remoteHost, remotePort);
       
+      console.log('- Tunnel successfully established');
       return tunnel;
     } catch (error) {
       console.error('Failed to create GitHub SSH tunnel:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        path: expandedPath,
+        username: githubUsername
+      });
       throw error;
     }
   }

@@ -158,9 +158,9 @@ object RetrofitClient {
         
         OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(120, TimeUnit.SECONDS)
-            .readTimeout(180, TimeUnit.SECONDS)  // LLM responses can take time
-            .writeTimeout(120, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)  // Reduced from 120 to 15 seconds
+            .readTimeout(60, TimeUnit.SECONDS)  // Reduced from 180 to 60 seconds
+            .writeTimeout(15, TimeUnit.SECONDS)  // Reduced from 120 to 15 seconds
             .build()
     }
     
