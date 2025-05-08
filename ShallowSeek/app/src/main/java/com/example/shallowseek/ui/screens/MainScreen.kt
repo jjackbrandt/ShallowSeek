@@ -77,12 +77,7 @@ fun MainScreen(viewModel: MainViewModel) {
                             contentDescription = "Settings"
                         )
                     }
-                    IconButton(onClick = { viewModel.clearConversation() }) {
-                        Icon(
-                            imageVector = Icons.Default.Clear,
-                            contentDescription = "Clear"
-                        )
-                    }
+                    // Removed Clear button from top bar - will add to bottom of response area
                 }
             )
         },
@@ -140,6 +135,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         // Response area (expands to fill available space)
                         ResponseDisplay(
                             response = viewModel.responseText,
+                            onClearResponse = { viewModel.clearConversation() },
                             modifier = Modifier.weight(if (showSettings) 0.5f else 1f)
                         )
                         
