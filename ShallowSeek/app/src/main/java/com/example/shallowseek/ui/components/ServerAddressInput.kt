@@ -211,19 +211,24 @@ fun ServerAddressInput(
                         
                         RetrofitClient.disconnectFromSsh { success, message ->
                             // Regardless of success/failure, we need to reset the address
-                            val localhost = RetrofitClient.getLocalhostEquivalent()
-                            val defaultAddress = "http://$localhost:3000/"
+                            val host = RetrofitClient.getLocalhostEquivalent()
+                            val defaultAddress = "http://$host:3000/"
                             RetrofitClient.setServerAddress(defaultAddress)
                             prefManager.saveServerAddress(defaultAddress)
                             onAddressChange(defaultAddress)
+                            RetrofitClient.addSshDebugLog("Reset server address to default: $defaultAddress")
                             
                             if (success) {
                                 isConnectedViaSSH = false
+                                // Force UI refresh by toggling expand state to make sure connect button shows up
+                                expandSshSection = true
                                 RetrofitClient.addSshDebugLog("SSH disconnected successfully")
                             } else {
                                 RetrofitClient.addSshDebugLog("SSH disconnect failed, but we've reset the server address anyway")
                                 // Force reset the SSH status
                                 isConnectedViaSSH = false
+                                // Force UI refresh
+                                expandSshSection = true
                             }
                         }
                     }
@@ -258,6 +263,54 @@ fun ServerAddressInput(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Connect via SSH")
+                    }
+                    
+                    // Advanced development options
+                    var showDevOptions by remember { mutableStateOf(false) }
+                    
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    TextButton(
+                        onClick = { showDevOptions = !showDevOptions },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Development options")
+                    }
+                    
+                    if (showDevOptions) {
+                        var showNetworkTest by remember { mutableStateOf(false) }
+                        
+                        TextButton(
+                            onClick = { showNetworkTest = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Network Test")
+                        }
+                        
+                        if (showNetworkTest) {
+                            Dialog(onDismissRequest = { showNetworkTest = false }) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight(0.9f)
+                                        .padding(8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(8.dp)
+                                            .fillMaxSize()
+                                    ) {
+                                        Text(
+                                            "Network Test",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                        
+                                        com.example.shallowseek.ui.screens.TestNetworkScreen()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -601,11 +654,12 @@ fun SshConnectDialog(
                                 ) { success, message ->
                                     connecting = false
                                     if (success) {
-                                        // Set correct host based on device type
-                                        val localhost = RetrofitClient.getLocalhostEquivalent()
-                                        val newServerAddress = "http://$localhost:$localPortInt/"
+                                        // For physical devices, localhost doesn't work - we need to use the actual IP with the tunnel port
+                                        val host = RetrofitClient.getLocalhostEquivalent()
+                                        val newServerAddress = "http://$host:$localPortInt/"
                                         RetrofitClient.setServerAddress(newServerAddress)
                                         prefManager.saveServerAddress(newServerAddress)
+                                        RetrofitClient.addSshDebugLog("Using $host instead of localhost for SSH tunnel connection")
                                         
                                         // Test the connection through SSH tunnel
                                         RetrofitClient.addSshDebugLog("Testing SSH tunnel connection to $newServerAddress")

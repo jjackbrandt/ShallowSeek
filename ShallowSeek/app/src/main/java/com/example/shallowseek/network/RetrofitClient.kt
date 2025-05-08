@@ -15,7 +15,12 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * Data classes for SSH connection requests
@@ -168,6 +173,15 @@ object RetrofitClient {
      */
     fun getSshTunnelInfo(): SshTunnelInfo? = sshTunnelInfo
     
+    // Create an all-trusting TrustManager for development use only
+    private fun createUnsafeTrustManager(): X509TrustManager {
+        return object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        }
+    }
+    
     // OkHttpClient with logging and timeouts
     private val client by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -181,9 +195,19 @@ object RetrofitClient {
             level = HttpLoggingInterceptor.Level.BASIC
         }
         
+        // Create a trust manager that does not validate certificate chains
+        val trustManager = createUnsafeTrustManager()
+        
+        // Install the all-trusting trust manager
+        val sslContext = SSLContext.getInstance("TLS")
+        sslContext.init(null, arrayOf<TrustManager>(trustManager), SecureRandom())
+        
         OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .addInterceptor(customInterceptor) 
+            .addInterceptor(customInterceptor)
+            // Explicitly permit cleartext traffic
+            .hostnameVerifier { _, _ -> true } // Allow all hostnames for development
+            .sslSocketFactory(sslContext.socketFactory, trustManager) // Use custom SSL socket factory
             .connectTimeout(30, TimeUnit.SECONDS)  // Increased from 15 to 30 seconds for more reliability
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)  // Increased from 15 to 30 seconds for more reliability
@@ -207,8 +231,10 @@ object RetrofitClient {
             addSshDebugLog("Detected emulator - using 10.0.2.2 for localhost")
             "10.0.2.2"
         } else {
-            addSshDebugLog("Detected physical device - using localhost")
-            "localhost"
+            // For physical devices using SSH, we need to use the actual IP of the computer running the server
+            // localhost on a physical device refers to the device itself, not the computer
+            addSshDebugLog("Detected physical device - using actual server IP 10.249.187.131 instead of localhost")
+            "10.249.187.131"  // Use the server's actual IP for physical devices
         }
     }
     
@@ -456,9 +482,10 @@ object RetrofitClient {
                                 isConnectedViaSSH = true
                                 sshTunnelInfo = response.body()?.tunnel
                                 
-                                // First update the server address to use localhost instead of 10.0.2.2
+                                // For physical devices, we need to use the actual server IP with the tunnel port
                                 val tunnelPort = response.body()?.tunnel?.localPort ?: 3000
-                                val newServerAddress = "http://localhost:$tunnelPort/"
+                                val host = getLocalhostEquivalent() // This will give us the appropriate host based on device type
+                                val newServerAddress = "http://$host:$tunnelPort/"
                                 addSshDebugLog("Updating server address to: $newServerAddress")
                                 
                                 callback(true, response.body()?.message ?: "SSH tunnel established")

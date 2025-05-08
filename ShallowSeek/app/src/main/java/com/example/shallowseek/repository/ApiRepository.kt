@@ -14,7 +14,8 @@ import kotlinx.coroutines.withContext
  * It encapsulates the network logic and error handling.
  */
 class ApiRepository {
-    private val apiService = RetrofitClient.getApiService()
+    // Initialize with a getter to ensure we always get the most recent instance
+    private val apiService get() = RetrofitClient.getApiService()
     
     /**
      * Send a prompt to the API and get the generated response.
