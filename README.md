@@ -121,6 +121,28 @@ This option lets you use your GitHub SSH credentials:
    - Remote Port: The port your ShallowSeek server is running on (usually 3000)
 5. Tap "Connect" to establish the tunnel through GitHub's SSH servers
 
+### SSH Key Setup for Android
+
+To use SSH tunneling on your Android device, you'll need to set up SSH keys:
+
+1. **Generate SSH Keys** (if you don't already have them):
+   - On your computer, run: `ssh-keygen -t ed25519 -C "your_email@example.com"`
+   - Follow prompts to save the key (default location is `~/.ssh/id_ed25519`)
+   - Set a passphrase if desired (you'll need this when connecting from the app)
+
+2. **Add SSH Key to GitHub** (for GitHub SSH connection):
+   - Copy your public key: `cat ~/.ssh/id_ed25519.pub`
+   - Go to GitHub → Settings → SSH and GPG keys → New SSH key
+   - Paste your public key and save
+
+3. **Transfer Private Key to Android Device**:
+   - Use a secure method like ADB or a password manager to transfer your private key
+   - Example using ADB:
+     ```bash
+     adb push ~/.ssh/id_ed25519 /sdcard/Download/
+     ```
+   - In the app, specify this file location when connecting via SSH
+
 ## Architecture
 
 ### Android App (Kotlin + Jetpack Compose)
