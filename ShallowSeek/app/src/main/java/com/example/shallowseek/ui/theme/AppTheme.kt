@@ -32,8 +32,8 @@ fun getColorScheme(theme: AppTheme, isDarkTheme: Boolean): ColorScheme {
     return when (theme) {
         AppTheme.SYSTEM -> if (isDarkTheme) DarkColorScheme else LightColorScheme
         AppTheme.LIGHT -> LightColorScheme
-        AppTheme.DARK -> DarkColorScheme
-        AppTheme.DRACULA -> DraculaColorScheme
+        AppTheme.DARK -> DraculaColorScheme
+        AppTheme.DRACULA -> DarkColorScheme
         AppTheme.MATERIAL_DEEP_OCEAN -> MaterialDeepOceanColorScheme
         AppTheme.ROOTBEER -> RootbeerColorScheme
         AppTheme.FOREST -> ForestColorScheme
