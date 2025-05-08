@@ -83,8 +83,16 @@ interface TestApiService {
 object RetrofitClient {
     private const val TAG = "RetrofitClient"
     
-    // Default server address (change to your MacBook's IP address on your local network)
+    // Default server address that will be adjusted based on device type
     private var BASE_URL = "http://10.0.2.2:3000/"
+    
+    init {
+        // Initialize BASE_URL based on device type at startup
+        val host = if (isEmulator()) "10.0.2.2" else "localhost"
+        BASE_URL = "http://$host:3000/"
+        
+        Log.d(TAG, "Device detection - using $host. Set initial BASE_URL to $BASE_URL")
+    }
     
     // SSH connection status
     private var isConnectedViaSSH = false
@@ -219,9 +227,29 @@ object RetrofitClient {
      * @return ApiService instance for making API calls
      */
     fun getApiService(): ApiService {
+        // FORCE CHECK: If we're connected via SSH, make sure we're using the correct port
+        if (isConnectedViaSSH && sshTunnelInfo != null) {
+            val tunnelPort = sshTunnelInfo!!.localPort
+            val host = getLocalhostEquivalent()
+            val expectedUrl = "http://$host:$tunnelPort/"
+            
+            if (BASE_URL != expectedUrl) {
+                addSshDebugLog("⚠️ CRITICAL URL FIX: Detected URL mismatch. Using $BASE_URL but should be $expectedUrl")
+                BASE_URL = expectedUrl
+                
+                // Force recreate all API instances
+                apiInstance = null
+                sshApiInstance = null
+                testApiInstance = null
+            }
+        }
+        
+        // Create new API instance if needed
         if (apiInstance == null) {
             apiInstance = retrofit.create(ApiService::class.java)
+            addSshDebugLog("Created new API instance with URL: $BASE_URL")
         }
+        
         return apiInstance!!
     }
     
@@ -246,8 +274,26 @@ object RetrofitClient {
      * @return TestApiService instance for making test API calls
      */
     private fun getTestApiService(): TestApiService {
+        // FORCE CHECK: If we're connected via SSH, make sure we're using the correct port
+        if (isConnectedViaSSH && sshTunnelInfo != null) {
+            val tunnelPort = sshTunnelInfo!!.localPort
+            val host = getLocalhostEquivalent()
+            val expectedUrl = "http://$host:$tunnelPort/"
+            
+            if (BASE_URL != expectedUrl) {
+                addSshDebugLog("⚠️ CRITICAL URL FIX: Detected URL mismatch. Using $BASE_URL but should be $expectedUrl")
+                BASE_URL = expectedUrl
+                
+                // Force recreate all API instances
+                apiInstance = null
+                sshApiInstance = null
+                testApiInstance = null
+            }
+        }
+        
         // Always create a fresh instance with the current server address
         testApiInstance = retrofit.create(TestApiService::class.java)
+        addSshDebugLog("Created new TEST API instance with URL: $BASE_URL")
         return testApiInstance!!
     }
     
@@ -257,37 +303,38 @@ object RetrofitClient {
      * @param callback Callback for success/failure with message
      */
     fun testConnection(callback: (success: Boolean, message: String) -> Unit) {
-        addSshDebugLog("Testing connection to $BASE_URL...")
+        addSshDebugLog("======= TESTING CONNECTION =======")
+        addSshDebugLog("Current URL: $BASE_URL")
+        addSshDebugLog("Device type: ${if (isEmulator()) "Emulator" else "Physical device"}")
+        addSshDebugLog("SSH Connected: $isConnectedViaSSH")
+        if (sshTunnelInfo != null) {
+            addSshDebugLog("SSH Tunnel: localhost:${sshTunnelInfo?.localPort} -> ${sshTunnelInfo?.remoteHost}:${sshTunnelInfo?.remotePort}")
+        }
         
-        // Get correct localhost equivalent for this device
-        val correctLocalhost = getLocalhostEquivalent()
-        
-        // Fix the URL if needed
-        val shouldUse10_0_2_2 = isEmulator() && BASE_URL.contains("localhost")
-        val shouldUseLocalhost = !isEmulator() && BASE_URL.contains("10.0.2.2")
-        
-        if (shouldUse10_0_2_2 || shouldUseLocalhost) {
-            // Extract port from current URL
-            val pattern = if (shouldUse10_0_2_2) "localhost:(\\d+)" else "10.0.2.2:(\\d+)" 
-            val portRegex = pattern.toRegex()
-            val portMatch = portRegex.find(BASE_URL)
-            val port = portMatch?.groupValues?.get(1) ?: "3001"
+        // If we're connected via SSH, ENSURE we're using the correct URL
+        if (isConnectedViaSSH && sshTunnelInfo != null) {
+            val tunnelPort = sshTunnelInfo!!.localPort
+            val host = getLocalhostEquivalent()
+            val expectedUrl = "http://$host:$tunnelPort/"
             
-            val wrongHost = if (shouldUse10_0_2_2) "localhost" else "10.0.2.2"
-            val correctedUrl = BASE_URL.replace(wrongHost, correctLocalhost)
-            
-            addSshDebugLog("⚠️ DEVICE FIX: Changing $BASE_URL to $correctedUrl for device compatibility")
-            
-            // Actually update the URL
-            BASE_URL = correctedUrl
-            
-            // Reset API instances to use new URL
-            apiInstance = null
-            sshApiInstance = null
-            testApiInstance = null
+            if (BASE_URL != expectedUrl) {
+                addSshDebugLog("🔴 CRITICAL ERROR: Wrong URL for SSH tunnel!")
+                addSshDebugLog("Using: $BASE_URL")
+                addSshDebugLog("Should be: $expectedUrl")
+                
+                // FIX IT!
+                BASE_URL = expectedUrl
+                addSshDebugLog("✅ Fixed URL to: $BASE_URL")
+                
+                // Reset all API instances
+                apiInstance = null
+                sshApiInstance = null
+                testApiInstance = null
+            }
         }
         
         addSshDebugLog("Final test URL: $BASE_URL")
+        addSshDebugLog("=================================")
         
         try {
             // First try the echo endpoint
