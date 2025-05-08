@@ -565,6 +565,7 @@ fun SshConnectDialog(
                                 RetrofitClient.addSshDebugLog("User initiated SSH connection: $host:$portInt -> $remoteHost:$remotePortInt with port forwarding on local port $localPortInt")
                                 
                                 // First set direct server address (temporary, just for initial connection)
+                                // Connect directly to the SSH server's API port (3000, not the tunnel port)
                                 val directServerAddress = "http://$host:3000/"
                                 RetrofitClient.addSshDebugLog("Setting temporary direct server address: $directServerAddress for SSH API connection")
                                 RetrofitClient.setServerAddress(directServerAddress)
@@ -583,7 +584,7 @@ fun SshConnectDialog(
                                 ) { success, message ->
                                     connecting = false
                                     if (success) {
-                                        // Update server address to use IP 10.0.0.2 (localhost equivalent on Android) with the local port
+                                        // Update server address to use IP 10.0.2.2 (localhost equivalent on Android) with the local port
                                         // because we're tunneling through SSH
                                         val newServerAddress = "http://10.0.2.2:$localPortInt/"
                                         RetrofitClient.setServerAddress(newServerAddress)

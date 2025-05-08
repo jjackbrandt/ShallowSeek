@@ -237,24 +237,26 @@ object RetrofitClient {
     fun testConnection(callback: (success: Boolean, message: String) -> Unit) {
         addSshDebugLog("Testing connection to $BASE_URL...")
         
-        // Detect if we're using localhost with a port
-        if (BASE_URL.contains("localhost")) {
-            addSshDebugLog("Using localhost address. Important: This will NOT work on Android emulator. Use 10.0.2.2 instead of localhost for emulator.")
+        // CRITICAL FIX: Always replace localhost with 10.0.2.2 on Android emulator
+        if (BASE_URL.contains("localhost") && !BASE_URL.contains("10.0.2.2")) {
+            // Extract port from current URL
+            val portRegex = "localhost:(\\d+)".toRegex()
+            val portMatch = portRegex.find(BASE_URL)
+            val port = portMatch?.groupValues?.get(1) ?: "3001"
             
-            // Try to check what the actual server address should be
-            val host = if (isConnectedViaSSH()) {
-                addSshDebugLog("SSH is connected - using localhost is correct for SSH tunneling")
-                "localhost"
-            } else if (BASE_URL.contains("10.0.2.2")) {
-                addSshDebugLog("Using emulator address (10.0.2.2)")
-                "10.0.2.2"
-            } else {
-                addSshDebugLog("Warning: Using localhost but not connected via SSH may not work on emulator")
-                "localhost"
-            }
+            val correctedUrl = BASE_URL.replace("localhost", "10.0.2.2")
+            addSshDebugLog("⚠️ LOCALHOST FIX: Changing $BASE_URL to $correctedUrl for Android emulator compatibility")
             
-            addSshDebugLog("Testing with host: $host")
+            // Actually update the URL
+            BASE_URL = correctedUrl
+            
+            // Reset API instances to use new URL
+            apiInstance = null
+            sshApiInstance = null
+            testApiInstance = null
         }
+        
+        addSshDebugLog("Final test URL: $BASE_URL")
         
         try {
             // First try the echo endpoint

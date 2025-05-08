@@ -120,6 +120,55 @@ app.get('/models', async (req, res) => {
   }
 });
 
+// Root endpoint - show simple homepage
+app.get('/', (req, res) => {
+  console.log('Homepage requested');
+  res.send(`
+    <html>
+      <head>
+        <title>ShallowSeek Server</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+          h1 { color: #333; }
+          .container { max-width: 800px; margin: 0 auto; }
+          .endpoint { background: #f4f4f4; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+          code { background: #eee; padding: 2px 5px; border-radius: 3px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>ShallowSeek Server</h1>
+          <p>Server is running. Status: Active</p>
+          
+          <h2>Available Endpoints:</h2>
+          <div class="endpoint">
+            <h3>GET /health</h3>
+            <p>Check server health status</p>
+          </div>
+          
+          <div class="endpoint">
+            <h3>GET /echo</h3>
+            <p>Test endpoint that echoes back request information</p>
+          </div>
+          
+          <div class="endpoint">
+            <h3>GET /models</h3>
+            <p>Get available language models from Ollama</p>
+          </div>
+          
+          <div class="endpoint">
+            <h3>POST /generate</h3>
+            <p>Generate text using a language model</p>
+          </div>
+          
+          <h3>SSH Tunnel Status:</h3>
+          <p>Active tunnels: ${sshTunnel ? Array.from(sshTunnel.tunnels.keys()).join(', ') : 'None'}</p>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   console.log('[HEALTH CHECK] Received health check request');
