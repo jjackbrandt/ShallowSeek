@@ -197,31 +197,6 @@ fun ServerAddressInput(
                     ) {
                         Text("Connect via SSH")
                     }
-                    
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    
-                    // GitHub SSH
-                    var showGithubSshOptions by remember { mutableStateOf(false) }
-                    
-                    TextButton(
-                        onClick = { showGithubSshOptions = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Connect via GitHub SSH")
-                    }
-                    
-                    if (showGithubSshOptions) {
-                        GithubSshDialog(
-                            onDismiss = { showGithubSshOptions = false },
-                            onConnect = { success ->
-                                showGithubSshOptions = false
-                                if (success) {
-                                    isConnectedViaSSH = true
-                                    expandSshSection = false
-                                }
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -460,42 +435,101 @@ fun SshConnectDialog(
                     
                     Button(
                         onClick = {
-                            connecting = true
-                            errorMessage = ""
-                            
-                            // Save settings to preferences
-                            val portInt = port.toIntOrNull() ?: 22
-                            val localPortInt = localPort.toIntOrNull() ?: 3000
-                            val remotePortInt = remotePort.toIntOrNull() ?: 3000
-                            
-                            prefManager.saveSshSettings(
-                                host = host,
-                                port = portInt,
-                                username = username,
-                                usePassword = usePassword,
-                                privateKeyPath = privateKey,
-                                localPort = localPortInt,
-                                remoteHost = remoteHost,
-                                remotePort = remotePortInt
-                            )
-                            
-                            RetrofitClient.connectToSsh(
-                                host = host,
-                                port = portInt,
-                                username = username,
-                                password = if (usePassword) password else null,
-                                privateKey = if (!usePassword) privateKey else null,
-                                passphrase = if (!usePassword) passphrase else null,
-                                localPort = localPortInt,
-                                remoteHost = remoteHost,
-                                remotePort = remotePortInt
-                            ) { success, message ->
-                                connecting = false
-                                if (success) {
-                                    onConnect(true)
-                                } else {
-                                    errorMessage = message
+                            try {
+                                connecting = true
+                                errorMessage = ""
+                                
+                                // Validate inputs
+                                if (host.isBlank()) {
+                                    errorMessage = "SSH Host cannot be empty"
+                                    connecting = false
+                                    return@Button
                                 }
+                                
+                                if (username.isBlank()) {
+                                    errorMessage = "Username cannot be empty"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                if (usePassword && password.isBlank()) {
+                                    errorMessage = "Password cannot be empty"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                if (!usePassword && privateKey.isBlank()) {
+                                    errorMessage = "Private key path cannot be empty"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                // Parse numeric values safely
+                                val portInt = port.toIntOrNull() 
+                                if (portInt == null || portInt <= 0 || portInt > 65535) {
+                                    errorMessage = "Invalid port number (must be 1-65535)"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                val localPortInt = localPort.toIntOrNull()
+                                if (localPortInt == null || localPortInt <= 0 || localPortInt > 65535) {
+                                    errorMessage = "Invalid local port number (must be 1-65535)"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                val remotePortInt = remotePort.toIntOrNull() 
+                                if (remotePortInt == null || remotePortInt <= 0 || remotePortInt > 65535) {
+                                    errorMessage = "Invalid remote port number (must be 1-65535)"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                if (remoteHost.isBlank()) {
+                                    errorMessage = "Remote host cannot be empty"
+                                    connecting = false
+                                    return@Button
+                                }
+                                
+                                // Save settings to preferences
+                                prefManager.saveSshSettings(
+                                    host = host,
+                                    port = portInt,
+                                    username = username,
+                                    usePassword = usePassword,
+                                    privateKeyPath = privateKey,
+                                    localPort = localPortInt,
+                                    remoteHost = remoteHost,
+                                    remotePort = remotePortInt
+                                )
+                                
+                                // Show connection attempt message
+                                errorMessage = "Attempting to connect..."
+                                
+                                // Try to connect
+                                RetrofitClient.connectToSsh(
+                                    host = host,
+                                    port = portInt,
+                                    username = username,
+                                    password = if (usePassword) password else null,
+                                    privateKey = if (!usePassword) privateKey else null,
+                                    passphrase = if (!usePassword) passphrase else null,
+                                    localPort = localPortInt,
+                                    remoteHost = remoteHost,
+                                    remotePort = remotePortInt
+                                ) { success, message ->
+                                    connecting = false
+                                    if (success) {
+                                        onConnect(true)
+                                    } else {
+                                        errorMessage = message
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                connecting = false
+                                errorMessage = "Error: ${e.message}"
+                                RetrofitClient.addSshDebugLog("Exception in SSH connect button: ${e.message}")
                             }
                         },
                         enabled = !connecting && host.isNotEmpty() && username.isNotEmpty() && 
@@ -572,211 +606,4 @@ fun SshDebugDialog(
     }
 }
 
-/**
- * Dialog for GitHub SSH connection configuration.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun GithubSshDialog(
-    onDismiss: () -> Unit,
-    onConnect: (Boolean) -> Unit
-) {
-    val context = LocalContext.current
-    val prefManager = remember { PreferencesManager.getInstance(context) }
-    
-    var githubUsername by remember { mutableStateOf(prefManager.getGithubUsername()) }
-    var sshKeyPath by remember { mutableStateOf(prefManager.getGithubSshKeyPath()) }
-    var passphrase by remember { mutableStateOf("") } // We don't save passphrases for security
-    var localPort by remember { mutableStateOf(prefManager.getGithubLocalPort().toString()) }
-    var remoteHost by remember { mutableStateOf(prefManager.getGithubRemoteHost()) }
-    var remotePort by remember { mutableStateOf(prefManager.getGithubRemotePort().toString()) }
-    var connecting by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
-    var showDebugLogs by remember { mutableStateOf(false) }
-    
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "GitHub SSH Connection",
-                    style = MaterialTheme.typography.titleLarge
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // GitHub details
-                OutlinedTextField(
-                    value = githubUsername,
-                    onValueChange = { githubUsername = it },
-                    label = { Text("GitHub Username") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = sshKeyPath,
-                    onValueChange = { sshKeyPath = it },
-                    label = { Text("SSH Key Path") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = passphrase,
-                    onValueChange = { passphrase = it },
-                    label = { Text("Passphrase (if needed)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Divider()
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Port forwarding
-                Text(
-                    text = "Port Forwarding",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = localPort,
-                    onValueChange = { localPort = it },
-                    label = { Text("Local Port") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = remoteHost,
-                    onValueChange = { remoteHost = it },
-                    label = { Text("Remote Host") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                OutlinedTextField(
-                    value = remotePort,
-                    onValueChange = { remotePort = it },
-                    label = { Text("Remote Port") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                
-                // Error message
-                if (errorMessage.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Advanced section
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Advanced",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    Button(
-                        onClick = { showDebugLogs = true },
-                        modifier = Modifier.padding(4.dp)
-                    ) {
-                        Text("Debug Logs")
-                    }
-                }
-                
-                if (showDebugLogs) {
-                    SshDebugDialog(onDismiss = { showDebugLogs = false })
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Cancel")
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    Button(
-                        onClick = {
-                            connecting = true
-                            errorMessage = ""
-                            
-                            // Save settings to preferences
-                            val localPortInt = localPort.toIntOrNull() ?: 3000
-                            val remotePortInt = remotePort.toIntOrNull() ?: 3000
-                            
-                            prefManager.saveGithubSshSettings(
-                                username = githubUsername,
-                                sshKeyPath = sshKeyPath,
-                                localPort = localPortInt,
-                                remoteHost = remoteHost,
-                                remotePort = remotePortInt
-                            )
-                            
-                            RetrofitClient.connectToGithubSsh(
-                                githubUsername = githubUsername,
-                                sshKeyPath = sshKeyPath,
-                                passphrase = passphrase,
-                                localPort = localPortInt,
-                                remoteHost = remoteHost,
-                                remotePort = remotePortInt
-                            ) { success, message ->
-                                connecting = false
-                                if (success) {
-                                    onConnect(true)
-                                } else {
-                                    errorMessage = message
-                                }
-                            }
-                        },
-                        enabled = !connecting && githubUsername.isNotEmpty() && sshKeyPath.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Connect")
-                    }
-                }
-            }
-        }
-    }
-}
+// GitHub SSH Dialog removed

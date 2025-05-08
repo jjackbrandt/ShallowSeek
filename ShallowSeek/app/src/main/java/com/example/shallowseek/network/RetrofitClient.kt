@@ -32,15 +32,6 @@ data class SshConnectRequest(
     val remotePort: Int
 )
 
-data class GithubSshRequest(
-    val githubUsername: String,
-    val sshKeyPath: String? = null,
-    val passphrase: String? = null,
-    val localPort: Int,
-    val remoteHost: String,
-    val remotePort: Int
-)
-
 data class SshTunnelResponse(
     val status: String,
     val message: String,
@@ -65,9 +56,6 @@ data class SshStatusResponse(
 interface SshApiService {
     @POST("ssh/connect")
     fun connectSsh(@Body request: SshConnectRequest): Call<SshTunnelResponse>
-    
-    @POST("ssh/github")
-    fun connectGithubSsh(@Body request: GithubSshRequest): Call<SshTunnelResponse>
     
     @POST("ssh/disconnect")
     fun disconnectSsh(): Call<SshTunnelResponse>
@@ -229,97 +217,64 @@ object RetrofitClient {
         remotePort: Int,
         callback: (success: Boolean, message: String) -> Unit
     ) {
-        addSshDebugLog("Starting SSH connection to $host:$port with username $username")
-        addSshDebugLog("Using ${if (password != null) "password" else "private key"} authentication")
-        addSshDebugLog("Setting up tunnel: localhost:$localPort -> $remoteHost:$remotePort")
-        
-        val request = SshConnectRequest(
-            host = host,
-            port = port,
-            username = username,
-            password = password,
-            privateKey = privateKey,
-            passphrase = passphrase,
-            localPort = localPort,
-            remoteHost = remoteHost,
-            remotePort = remotePort
-        )
-        
-        getSshApiService().connectSsh(request).enqueue(object : Callback<SshTunnelResponse> {
-            override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
-                if (response.isSuccessful && response.body()?.status == "success") {
-                    addSshDebugLog("SSH connection successful: ${response.body()?.message}")
-                    isConnectedViaSSH = true
-                    sshTunnelInfo = response.body()?.tunnel
-                    callback(true, response.body()?.message ?: "SSH tunnel established")
-                } else {
-                    val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
-                    addSshDebugLog("SSH connection failed: $errorMsg")
-                    callback(false, errorMsg)
-                }
-            }
+        try {
+            addSshDebugLog("Starting SSH connection to $host:$port with username $username")
+            addSshDebugLog("Using ${if (password != null) "password" else "private key"} authentication")
+            addSshDebugLog("Setting up tunnel: localhost:$localPort -> $remoteHost:$remotePort")
             
-            override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
-                addSshDebugLog("SSH connection request failed: ${t.message}")
-                Log.e(TAG, "SSH connection failed", t)
-                callback(false, "Connection failed: ${t.message}")
+            val request = SshConnectRequest(
+                host = host,
+                port = port,
+                username = username,
+                password = password,
+                privateKey = privateKey,
+                passphrase = passphrase,
+                localPort = localPort,
+                remoteHost = remoteHost,
+                remotePort = remotePort
+            )
+            
+            try {
+                getSshApiService().connectSsh(request).enqueue(object : Callback<SshTunnelResponse> {
+                    override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
+                        try {
+                            if (response.isSuccessful && response.body()?.status == "success") {
+                                addSshDebugLog("SSH connection successful: ${response.body()?.message}")
+                                isConnectedViaSSH = true
+                                sshTunnelInfo = response.body()?.tunnel
+                                callback(true, response.body()?.message ?: "SSH tunnel established")
+                            } else {
+                                val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
+                                addSshDebugLog("SSH connection failed: $errorMsg")
+                                callback(false, errorMsg)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Exception in SSH response handling", e)
+                            addSshDebugLog("Exception in SSH response handling: ${e.message}")
+                            callback(false, "Error processing response: ${e.message}")
+                        }
+                    }
+                    
+                    override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
+                        addSshDebugLog("SSH connection request failed: ${t.message}")
+                        Log.e(TAG, "SSH connection failed", t)
+                        callback(false, "Connection failed: ${t.message}")
+                    }
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception while making SSH API call", e)
+                addSshDebugLog("Exception while making SSH API call: ${e.message}")
+                callback(false, "Error starting connection: ${e.message}")
             }
-        })
+        } catch (e: Exception) {
+            Log.e(TAG, "Fatal exception in SSH connection", e)
+            addSshDebugLog("Fatal exception in SSH connection: ${e.message}")
+            callback(false, "Fatal error: ${e.message}")
+        }
+    }
     }
     
-    /**
-     * Connect to SSH server using GitHub SSH credentials
-     * 
-     * @param githubUsername GitHub username
-     * @param sshKeyPath Path to SSH key (optional, default: ~/.ssh/id_rsa)
-     * @param passphrase Passphrase for SSH key (optional)
-     * @param localPort Local port to forward
-     * @param remoteHost Remote host to forward to
-     * @param remotePort Remote port to forward to
-     * @param callback Callback for success/failure
-     */
-    fun connectToGithubSsh(
-        githubUsername: String,
-        sshKeyPath: String? = null,
-        passphrase: String? = null,
-        localPort: Int,
-        remoteHost: String,
-        remotePort: Int,
-        callback: (success: Boolean, message: String) -> Unit
-    ) {
-        addSshDebugLog("Starting GitHub SSH connection for user $githubUsername")
-        addSshDebugLog("Using SSH key from path: ${sshKeyPath ?: "~/.ssh/id_rsa (default)"}")
-        addSshDebugLog("Setting up tunnel: localhost:$localPort -> $remoteHost:$remotePort")
-        
-        val request = GithubSshRequest(
-            githubUsername = githubUsername,
-            sshKeyPath = sshKeyPath,
-            passphrase = passphrase,
-            localPort = localPort,
-            remoteHost = remoteHost,
-            remotePort = remotePort
-        )
-        
-        getSshApiService().connectGithubSsh(request).enqueue(object : Callback<SshTunnelResponse> {
-            override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
-                if (response.isSuccessful && response.body()?.status == "success") {
-                    addSshDebugLog("GitHub SSH connection successful: ${response.body()?.message}")
-                    isConnectedViaSSH = true
-                    sshTunnelInfo = response.body()?.tunnel
-                    callback(true, response.body()?.message ?: "GitHub SSH tunnel established")
-                } else {
-                    val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
-                    addSshDebugLog("GitHub SSH connection failed: $errorMsg")
-                    callback(false, errorMsg)
-                }
-            }
-            
-            override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
-                addSshDebugLog("GitHub SSH connection request failed: ${t.message}")
-                Log.e(TAG, "GitHub SSH connection failed", t)
-                callback(false, "Connection failed: ${t.message}")
-            }
-        })
+    // GitHub SSH functionality removed
     }
     
     /**

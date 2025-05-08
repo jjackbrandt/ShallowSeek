@@ -23,12 +23,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_SSH_REMOTE_HOST = "ssh_remote_host"
         private const val KEY_SSH_REMOTE_PORT = "ssh_remote_port"
         
-        // GitHub SSH preferences
-        private const val KEY_GITHUB_USERNAME = "github_username"
-        private const val KEY_GITHUB_SSH_KEY_PATH = "github_ssh_key_path"
-        private const val KEY_GITHUB_LOCAL_PORT = "github_local_port"
-        private const val KEY_GITHUB_REMOTE_HOST = "github_remote_host"
-        private const val KEY_GITHUB_REMOTE_PORT = "github_remote_port"
+        // GitHub SSH preferences removed
         
         // Singleton instance
         @Volatile
@@ -85,29 +80,7 @@ class PreferencesManager(context: Context) {
     fun getSshRemoteHost(): String = prefs.getString(KEY_SSH_REMOTE_HOST, "localhost") ?: "localhost"
     fun getSshRemotePort(): Int = prefs.getInt(KEY_SSH_REMOTE_PORT, 3000)
     
-    // GitHub SSH settings
-    fun saveGithubSshSettings(
-        username: String,
-        sshKeyPath: String,
-        localPort: Int,
-        remoteHost: String,
-        remotePort: Int
-    ) {
-        Log.d(TAG, "Saving GitHub SSH settings for user: $username")
-        prefs.edit().apply {
-            putString(KEY_GITHUB_USERNAME, username)
-            putString(KEY_GITHUB_SSH_KEY_PATH, sshKeyPath)
-            putInt(KEY_GITHUB_LOCAL_PORT, localPort)
-            putString(KEY_GITHUB_REMOTE_HOST, remoteHost)
-            putInt(KEY_GITHUB_REMOTE_PORT, remotePort)
-        }.apply()
-    }
-    
-    fun getGithubUsername(): String = prefs.getString(KEY_GITHUB_USERNAME, "") ?: ""
-    fun getGithubSshKeyPath(): String = prefs.getString(KEY_GITHUB_SSH_KEY_PATH, "~/.ssh/id_rsa") ?: "~/.ssh/id_rsa"
-    fun getGithubLocalPort(): Int = prefs.getInt(KEY_GITHUB_LOCAL_PORT, 3000)
-    fun getGithubRemoteHost(): String = prefs.getString(KEY_GITHUB_REMOTE_HOST, "localhost") ?: "localhost"
-    fun getGithubRemotePort(): Int = prefs.getInt(KEY_GITHUB_REMOTE_PORT, 3000)
+    // GitHub SSH settings removed
     
     // Clear all preferences
     fun clearAll() {
