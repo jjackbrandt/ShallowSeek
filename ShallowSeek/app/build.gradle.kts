@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.example.shallowseek"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.shallowseek"
         minSdk = 31
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
