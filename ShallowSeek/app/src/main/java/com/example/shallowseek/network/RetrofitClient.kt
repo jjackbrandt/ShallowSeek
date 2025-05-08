@@ -119,6 +119,14 @@ object RetrofitClient {
     fun getSshDebugLogs(): List<String> = sshDebugLogs.toList()
     
     /**
+     * Clear all SSH debug logs
+     */
+    fun clearSshDebugLogs() {
+        sshDebugLogs.clear()
+        addSshDebugLog("Logs cleared")
+    }
+    
+    /**
      * Configure the base URL for the API.
      * 
      * @param serverAddress The server address including protocol and port (e.g., "http://192.168.1.100:3000/")

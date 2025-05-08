@@ -1,12 +1,17 @@
 package com.example.shallowseek.ui.components
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -570,6 +575,11 @@ fun SshConnectDialog(
                                 errorMessage = "Attempting to connect to SSH server at $host:$portInt..."
                                 RetrofitClient.addSshDebugLog("User initiated SSH connection: $host:$portInt -> $remoteHost:$remotePortInt with port forwarding on local port $localPortInt")
                                 
+                                // Wait briefly to ensure any previous connections are fully closed
+                                try {
+                                    Thread.sleep(500)
+                                } catch (e: Exception) {}
+                                
                                 // First set direct server address (temporary, just for initial connection)
                                 // Connect directly to the SSH server's API port (3000, not the tunnel port)
                                 val directServerAddress = "http://$host:3000/"
@@ -648,16 +658,18 @@ fun SshDebugDialog(
     onDismiss: () -> Unit
 ) {
     val logs = RetrofitClient.getSshDebugLogs()
+    val context = LocalContext.current
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.8f)  // Use 80% of screen height
                 .padding(16.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .padding(16.dp)
             ) {
                 Text(
@@ -665,7 +677,36 @@ fun SshDebugDialog(
                     style = MaterialTheme.typography.titleLarge
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row {
+                    // Copy button
+                    Button(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("SSH Logs", logs.joinToString("\n"))
+                            clipboard.setPrimaryClip(clip)
+                            // Show toast
+                            android.widget.Toast.makeText(context, "Logs copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                    ) {
+                        Text("Copy Logs")
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Clear logs button
+                    Button(
+                        onClick = {
+                            RetrofitClient.clearSshDebugLogs()
+                            android.widget.Toast.makeText(context, "Logs cleared", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    ) {
+                        Text("Clear Logs")
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
                 
                 if (logs.isEmpty()) {
                     Text(
@@ -673,18 +714,27 @@ fun SshDebugDialog(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
-                    Column(
+                    // Add scrolling
+                    androidx.compose.foundation.lazy.LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .padding(8.dp)
+                            .padding(horizontal = 8.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), shape = MaterialTheme.shapes.small)
                     ) {
-                        logs.forEach { log ->
+                        items(logs) { log ->
                             Text(
                                 text = log,
                                 style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(vertical = 2.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
                             )
+                            
+                            // Add divider between logs
+                            if (log != logs.last()) {
+                                Divider(thickness = 0.5.dp)
+                            }
                         }
                     }
                 }
