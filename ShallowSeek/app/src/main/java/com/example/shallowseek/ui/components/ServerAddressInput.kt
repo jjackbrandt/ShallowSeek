@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import android.content.Context
 import com.example.shallowseek.network.RetrofitClient
 import com.example.shallowseek.util.PreferencesManager
 
