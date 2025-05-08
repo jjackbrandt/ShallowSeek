@@ -58,14 +58,17 @@ class SSHTunnel {
       this.sshClient = new Client();
 
       this.sshClient.on('ready', () => {
-        console.log('SSH connection established');
+        console.log('SSH connection established successfully - authentication successful');
+        console.log(`SSH connection details: ${this.config.host}:${this.config.port} user: ${this.config.username} auth: ${this.config.password ? 'password' : 'privateKey'}`);
         this.isConnected = true;
         resolve();
       });
 
       this.sshClient.on('error', (err) => {
         console.error('SSH connection error:', err);
-        console.error('Error details:', {
+        
+        // Detailed error analysis
+        let errorDetails = {
           message: err.message,
           code: err.code,
           level: err.level,
@@ -73,7 +76,31 @@ class SSHTunnel {
           port: this.config.port,
           username: this.config.username,
           authMethod: this.config.password ? 'password' : 'privateKey'
-        });
+        };
+        
+        console.error('Error details:', errorDetails);
+        
+        // Provide more user-friendly error messages
+        let userMessage = '';
+        if (err.level === 'client-authentication') {
+          userMessage = 'SSH authentication failed. Check your username and password. ' +
+            'Make sure your SSH server allows password authentication (check your sshd_config).';
+          console.error(userMessage);
+        } else if (err.code === 'ECONNREFUSED') {
+          userMessage = `SSH connection refused to ${this.config.host}:${this.config.port}. ` +
+            'Make sure SSH server is running and accepting connections.';
+          console.error(userMessage);
+        } else if (err.code === 'ETIMEDOUT') {
+          userMessage = `SSH connection timed out to ${this.config.host}:${this.config.port}. ` +
+            'Check your network connection and firewall settings.';
+          console.error(userMessage);
+        }
+        
+        // Add the user-friendly message to the error object
+        if (userMessage) {
+          err.userMessage = userMessage;
+        }
+        
         this.isConnected = false;
         reject(err);
       });
@@ -89,10 +116,10 @@ class SSHTunnel {
       });
 
       try {
-        // Add shorter connection timeout (15 seconds)
+        // Add reasonable connection timeout (30 seconds)
         const configWithTimeout = {
           ...this.config,
-          readyTimeout: 15000, // 15 seconds timeout (default is 20-30 seconds)
+          readyTimeout: 30000, // 30 seconds timeout (increased from 15 seconds)
           keepaliveInterval: 5000, // Send keep-alive every 5 seconds
           keepaliveCountMax: 3 // Disconnect after 3 failed keep-alives
         };
@@ -126,17 +153,23 @@ class SSHTunnel {
       }
 
       const server = net.createServer((socket) => {
+        console.log(`Attempting to create forward connection from 0.0.0.0:${localPort} to ${remoteHost}:${remotePort}`);
+        
         this.sshClient.forwardOut(
-          '127.0.0.1', // source address, this can be any valid address
+          '0.0.0.0', // source address, using all interfaces
           localPort,   // source port, this can be any valid port
           remoteHost,  // destination address (viewed from the SSH server)
           remotePort,  // destination port
           (err, stream) => {
             if (err) {
               console.error(`Tunnel error for ${tunnelKey}:`, err);
+              console.error('Error details:', err);
+              console.error(`Failed to forward port from 0.0.0.0:${localPort} to ${remoteHost}:${remotePort}`);
               socket.end();
               return;
             }
+            
+            console.log(`Successfully forwarded connection from 0.0.0.0:${localPort} to ${remoteHost}:${remotePort}`);
 
             socket.pipe(stream).pipe(socket);
 
@@ -156,14 +189,34 @@ class SSHTunnel {
         reject(err);
       });
 
-      server.listen(localPort, '127.0.0.1', () => {
-        console.log(`Tunnel established: localhost:${localPort} -> ${remoteHost}:${remotePort}`);
+      try {
+        // Handle port in use errors gracefully
+        server.on('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            console.error(`Port ${localPort} is already in use. Try a different port.`);
+            console.error(`SUGGESTION: Use port 3001 or higher to avoid conflicts with the Node.js server.`);
+            err.userMessage = `Port ${localPort} is already in use. Please try a different port (3001 or higher).`;
+            reject(err);
+          } else {
+            console.error(`Server error for tunnel ${tunnelKey}:`, err);
+            reject(err);
+          }
+        });
         
-        // Store the server instance so we can close it later
-        this.tunnels.set(tunnelKey, server);
-        
-        resolve(server);
-      });
+        server.listen(localPort, '0.0.0.0', () => {
+          console.log(`Tunnel server listening on 0.0.0.0:${localPort}, ready to forward to ${remoteHost}:${remotePort}`);
+          console.log(`IMPORTANT: Clients should now connect to localhost:${localPort} on the device running this app`);
+          console.log(`IMPORTANT: Verify the Node.js server is also running on ${remoteHost}:${remotePort}`);
+          
+          // Store the server instance so we can close it later
+          this.tunnels.set(tunnelKey, server);
+          
+          resolve(server);
+        });
+      } catch (err) {
+        console.error(`Failed to listen on port ${localPort}:`, err);
+        reject(err);
+      }
     });
   }
 

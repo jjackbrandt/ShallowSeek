@@ -30,7 +30,8 @@ app.use(express.json());
 
 // Logging middleware
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from IP: ${clientIP}`);
   next();
 });
 
@@ -121,7 +122,73 @@ app.get('/models', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  console.log('[HEALTH CHECK] Received health check request');
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    message: 'Server is healthy and responding to requests',
+    tunnelActive: sshTunnel && sshTunnel.isConnected ? true : false
+  });
+});
+
+// Echo endpoint for testing connections
+app.get('/echo', (req, res) => {
+  console.log('[ECHO] Received echo request');
+  res.json({
+    message: 'Echo successful!',
+    timestamp: new Date().toISOString(),
+    headers: req.headers,
+    query: req.query,
+    tunnelActive: sshTunnel && sshTunnel.isConnected ? true : false,
+    tunnelInfo: sshTunnel ? Array.from(sshTunnel.tunnels.keys()) : []
+  });
+});
+
+// SSH debug endpoint - to check SSH configuration on the server
+app.get('/ssh/debug', (req, res) => {
+  const os = require('os');
+  const { execSync } = require('child_process');
+  
+  // Get system information
+  const sshInfo = {
+    hostname: os.hostname(),
+    platform: os.platform(),
+    release: os.release(),
+    networkInterfaces: os.networkInterfaces(),
+    tunnels: sshTunnel ? Array.from(sshTunnel.tunnels.keys()) : [],
+    sshRunning: false,
+    sshd_config: {}
+  };
+  
+  // Check if SSH is running
+  try {
+    if (os.platform() === 'linux' || os.platform() === 'darwin') {
+      const sshStatus = execSync('ps -ef | grep sshd | grep -v grep').toString();
+      sshInfo.sshRunning = sshStatus.length > 0;
+      
+      // Try to get SSH config info
+      try {
+        const sshdConfig = execSync('grep "^Password\\|^Public" /etc/ssh/sshd_config').toString();
+        const lines = sshdConfig.split('\n');
+        lines.forEach(line => {
+          if (line.trim()) {
+            const [key, value] = line.split(/\s+/);
+            sshInfo.sshd_config[key] = value;
+          }
+        });
+      } catch (e) {
+        sshInfo.sshd_config.error = 'Could not read SSH config';
+      }
+    } else if (os.platform() === 'win32') {
+      const sshStatus = execSync('tasklist | findstr ssh').toString();
+      sshInfo.sshRunning = sshStatus.includes('sshd.exe');
+    }
+  } catch (e) {
+    sshInfo.sshRunning = false;
+    sshInfo.sshCheckError = e.message;
+  }
+  
+  res.json(sshInfo);
 });
 
 /**
@@ -131,6 +198,14 @@ app.get('/health', (req, res) => {
 // Create SSH tunnel
 app.post('/ssh/connect', async (req, res) => {
   const { host, port, username, password, privateKey, passphrase, localPort, remoteHost, remotePort } = req.body;
+  
+  console.log('=== SSH Connection Request ===');
+  console.log(`Host: ${host}`);
+  console.log(`Port: ${port || 22}`);
+  console.log(`Username: ${username}`);
+  console.log(`Auth method: ${password ? 'password' : 'privateKey'}`);
+  console.log(`Tunnel: 0.0.0.0:${localPort} -> ${remoteHost}:${remotePort}`);
+  console.log('===============================');
   
   try {
     // Close any existing tunnel
@@ -151,28 +226,57 @@ app.post('/ssh/connect', async (req, res) => {
       passphrase
     });
     
+    console.log('Connecting to SSH server...');
     // Connect to SSH server
     await sshTunnel.connect();
     
+    console.log('SSH connected. Creating tunnel...');
     // Create tunnel
     await sshTunnel.createTunnel(localPort, remoteHost, remotePort);
     
+    console.log('Tunnel established successfully');
+    
     res.json({
       status: 'success',
-      message: `SSH tunnel established from localhost:${localPort} to ${remoteHost}:${remotePort}`,
+      message: `SSH tunnel established from 0.0.0.0:${localPort} to ${remoteHost}:${remotePort}`,
       tunnel: {
         localPort,
         remoteHost,
         remotePort
-      }
+      },
+      note: "The SSH tunnel now forwards traffic from localhost:" + localPort + " to " + remoteHost + ":" + remotePort
     });
   } catch (error) {
     console.error('SSH tunnel error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      level: error.level,
+      host,
+      port: port || 22,
+      username,
+      authMethod: password ? 'password' : 'privateKey',
+      localPort,
+      remoteHost,
+      remotePort
+    });
+    
+    // Prepare a user-friendly error message
+    let errorMessage = 'Failed to establish SSH tunnel';
+    if (error.userMessage) {
+      errorMessage = error.userMessage; // Use the enhanced error message if available
+    } else if (error.level === 'client-authentication') {
+      errorMessage = 'SSH authentication failed. Check your username and password and ensure password authentication is enabled.';
+    }
     
     res.status(500).json({
       status: 'error',
-      message: 'Failed to establish SSH tunnel',
-      error: error.message
+      message: errorMessage,
+      error: error.message,
+      details: {
+        code: error.code,
+        level: error.level
+      }
     });
   }
 });
@@ -251,12 +355,12 @@ app.post('/ssh/disconnect', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════════╗
 ║                                              ║
 ║   ShallowSeek Server running on port ${PORT}    ║
-║   http://localhost:${PORT}                      ║
+║   http://0.0.0.0:${PORT} (all interfaces)      ║
 ║                                              ║
 ║   Connected to Ollama at:                    ║
 ║   ${OLLAMA_BASE_URL}                  ║

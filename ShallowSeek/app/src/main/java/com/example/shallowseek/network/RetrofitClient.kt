@@ -61,6 +61,15 @@ interface SshApiService {
     fun disconnectSsh(): Call<SshTunnelResponse>
 }
 
+// Test API interface for echo endpoint
+interface TestApiService {
+    @retrofit2.http.GET("echo")
+    fun testEcho(): Call<Map<String, Any>>
+    
+    @retrofit2.http.GET("health")
+    fun testHealth(): Call<Map<String, Any>>
+}
+
 /**
  * Singleton class that provides a pre-configured Retrofit instance for API communication.
  * 
@@ -108,12 +117,17 @@ object RetrofitClient {
      */
     fun setServerAddress(serverAddress: String) {
         if (serverAddress.isNotEmpty()) {
+            // Log the address change
+            addSshDebugLog("Changing server address from $BASE_URL to $serverAddress")
+            
             // Ensure URL ends with a slash
             BASE_URL = if (serverAddress.endsWith("/")) serverAddress else "$serverAddress/"
             
-            // Reset the API instance to use the new URL
+            // Reset the API instances to force them to use the new URL
             apiInstance = null
             sshApiInstance = null
+            
+            Log.d(TAG, "Server address updated to: $BASE_URL")
         }
     }
     
@@ -139,33 +153,43 @@ object RetrofitClient {
     fun getSshTunnelInfo(): SshTunnelInfo? = sshTunnelInfo
     
     // OkHttpClient with logging and timeouts
-    private val client: OkHttpClient by lazy {
+    private val client by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
         
+        val customInterceptor = HttpLoggingInterceptor {
+            // Custom log interceptor for detailed request/response logging
+            addSshDebugLog(it)
+        }.apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+        
         OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .connectTimeout(15, TimeUnit.SECONDS)  // Reduced from 120 to 15 seconds
-            .readTimeout(60, TimeUnit.SECONDS)  // Reduced from 180 to 60 seconds
-            .writeTimeout(15, TimeUnit.SECONDS)  // Reduced from 120 to 15 seconds
+            .addInterceptor(customInterceptor) 
+            .connectTimeout(30, TimeUnit.SECONDS)  // Increased from 15 to 30 seconds for more reliability
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)  // Increased from 15 to 30 seconds for more reliability
             .build()
     }
     
-    // Retrofit instance with our configuration
-    private val retrofit: Retrofit by lazy {
-        Retrofit.Builder()
-            .baseUrl(BASE_URL)
+    // Get a fresh Retrofit instance with the current BASE_URL
+    private val retrofit: Retrofit
+        get() = Retrofit.Builder()
+            .baseUrl(BASE_URL) // Always use the current BASE_URL
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-    }
     
     // API service instance (cached)
     private var apiInstance: ApiService? = null
     
     // SSH API service instance (cached)
     private var sshApiInstance: SshApiService? = null
+    
+    // Test API service instance (not cached, always fresh)
+    private var testApiInstance: TestApiService? = null
     
     /**
      * Get the API service instance.
@@ -185,10 +209,109 @@ object RetrofitClient {
      * @return SshApiService instance for making SSH-related API calls
      */
     fun getSshApiService(): SshApiService {
-        if (sshApiInstance == null) {
-            sshApiInstance = retrofit.create(SshApiService::class.java)
-        }
+        // Force recreate the SSH API instance to ensure it uses the current BASE_URL
+        apiInstance = null
+        sshApiInstance = null
+        
+        // Create a fresh instance with the current server address
+        sshApiInstance = retrofit.create(SshApiService::class.java)
         return sshApiInstance!!
+    }
+    
+    /**
+     * Get a test API service instance for the echo endpoint.
+     * 
+     * @return TestApiService instance for making test API calls
+     */
+    private fun getTestApiService(): TestApiService {
+        // Always create a fresh instance with the current server address
+        testApiInstance = retrofit.create(TestApiService::class.java)
+        return testApiInstance!!
+    }
+    
+    /**
+     * Test the connection to the server.
+     * 
+     * @param callback Callback for success/failure with message
+     */
+    fun testConnection(callback: (success: Boolean, message: String) -> Unit) {
+        addSshDebugLog("Testing connection to $BASE_URL...")
+        
+        // Detect if we're using localhost with a port
+        if (BASE_URL.contains("localhost")) {
+            addSshDebugLog("Using localhost address. Important: This will NOT work on Android emulator. Use 10.0.2.2 instead of localhost for emulator.")
+            
+            // Try to check what the actual server address should be
+            val host = if (isConnectedViaSSH()) {
+                addSshDebugLog("SSH is connected - using localhost is correct for SSH tunneling")
+                "localhost"
+            } else if (BASE_URL.contains("10.0.2.2")) {
+                addSshDebugLog("Using emulator address (10.0.2.2)")
+                "10.0.2.2"
+            } else {
+                addSshDebugLog("Warning: Using localhost but not connected via SSH may not work on emulator")
+                "localhost"
+            }
+            
+            addSshDebugLog("Testing with host: $host")
+        }
+        
+        try {
+            // First try the echo endpoint
+            getTestApiService().testEcho().enqueue(object : Callback<Map<String, Any>> {
+                override fun onResponse(call: Call<Map<String, Any>>, response: Response<Map<String, Any>>) {
+                    if (response.isSuccessful) {
+                        addSshDebugLog("Echo test successful: ${response.body()}")
+                        callback(true, "Echo test successful")
+                    } else {
+                        addSshDebugLog("Echo test failed with status code: ${response.code()}")
+                        
+                        // Try health endpoint as fallback
+                        getTestApiService().testHealth().enqueue(object : Callback<Map<String, Any>> {
+                            override fun onResponse(call: Call<Map<String, Any>>, response: Response<Map<String, Any>>) {
+                                if (response.isSuccessful) {
+                                    addSshDebugLog("Health check successful: ${response.body()}")
+                                    callback(true, "Health check successful")
+                                } else {
+                                    addSshDebugLog("Health check failed: ${response.code()}")
+                                    callback(false, "Both echo and health endpoints failed")
+                                }
+                            }
+                            
+                            override fun onFailure(call: Call<Map<String, Any>>, t: Throwable) {
+                                addSshDebugLog("Health check failed: ${t.message}")
+                                callback(false, "Connection test failed: ${t.message}")
+                            }
+                        })
+                    }
+                }
+                
+                override fun onFailure(call: Call<Map<String, Any>>, t: Throwable) {
+                    addSshDebugLog("Echo test failed: ${t.message}")
+                    
+                    // Try health endpoint as fallback
+                    getTestApiService().testHealth().enqueue(object : Callback<Map<String, Any>> {
+                        override fun onResponse(call: Call<Map<String, Any>>, response: Response<Map<String, Any>>) {
+                            if (response.isSuccessful) {
+                                addSshDebugLog("Health check successful: ${response.body()}")
+                                callback(true, "Health check successful")
+                            } else {
+                                addSshDebugLog("Health check failed: ${response.code()}")
+                                callback(false, "Both echo and health endpoints failed")
+                            }
+                        }
+                        
+                        override fun onFailure(call: Call<Map<String, Any>>, t: Throwable) {
+                            addSshDebugLog("Health check failed: ${t.message}")
+                            callback(false, "Connection test failed: ${t.message}")
+                        }
+                    })
+                }
+            })
+        } catch (e: Exception) {
+            addSshDebugLog("Error testing connection: ${e.message}")
+            callback(false, "Error testing connection: ${e.message}")
+        }
     }
     
     /**
@@ -240,8 +363,16 @@ object RetrofitClient {
                         try {
                             if (response.isSuccessful && response.body()?.status == "success") {
                                 addSshDebugLog("SSH connection successful: ${response.body()?.message}")
+                                addSshDebugLog("SSH tunnel info - Local port: ${response.body()?.tunnel?.localPort}, Remote: ${response.body()?.tunnel?.remoteHost}:${response.body()?.tunnel?.remotePort}")
+                                addSshDebugLog("⚠️ IMPORTANT: App will now use 'localhost:${response.body()?.tunnel?.localPort}' for API calls")
                                 isConnectedViaSSH = true
                                 sshTunnelInfo = response.body()?.tunnel
+                                
+                                // First update the server address to use localhost instead of 10.0.2.2
+                                val tunnelPort = response.body()?.tunnel?.localPort ?: 3000
+                                val newServerAddress = "http://localhost:$tunnelPort/"
+                                addSshDebugLog("Updating server address to: $newServerAddress")
+                                
                                 callback(true, response.body()?.message ?: "SSH tunnel established")
                             } else {
                                 val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
@@ -257,8 +388,22 @@ object RetrofitClient {
                     
                     override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
                         addSshDebugLog("SSH connection request failed: ${t.message}")
+                        addSshDebugLog("Current server address: ${getServerAddress()}")
+                        addSshDebugLog("Debug info - Is the server running and accessible? Is SSH server running?")
                         Log.e(TAG, "SSH connection failed", t)
-                        callback(false, "Connection failed: ${t.message}")
+                        
+                        // Provide more actionable error message to user
+                        val errorMsg = when {
+                            t.message?.contains("timeout") == true -> 
+                                "Connection timed out after 30 seconds. Check that the SSH server is running on port 22 and your network allows connections."
+                            t.message?.contains("refused") == true -> 
+                                "Connection refused. Check that the SSH server is running and accepting connections."
+                            t.message?.contains("Network is unreachable") == true -> 
+                                "Network is unreachable. Check your network connection and the host address."
+                            else -> "Connection failed: ${t.message}"
+                        }
+                        
+                        callback(false, errorMsg)
                     }
                 })
             } catch (e: Exception) {
@@ -272,10 +417,6 @@ object RetrofitClient {
             callback(false, "Fatal error: ${e.message}")
         }
     }
-    }
-    
-    // GitHub SSH functionality removed
-    }
     
     /**
      * Disconnect from SSH server
@@ -284,11 +425,17 @@ object RetrofitClient {
      */
     fun disconnectFromSsh(callback: (success: Boolean, message: String) -> Unit) {
         addSshDebugLog("Disconnecting SSH tunnel...")
+        if (sshTunnelInfo != null) {
+            addSshDebugLog("Current SSH tunnel: localhost:${sshTunnelInfo?.localPort} -> ${sshTunnelInfo?.remoteHost}:${sshTunnelInfo?.remotePort}")
+        } else {
+            addSshDebugLog("No active SSH tunnel information found")
+        }
         
         getSshApiService().disconnectSsh().enqueue(object : Callback<SshTunnelResponse> {
             override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
                 if (response.isSuccessful) {
                     addSshDebugLog("SSH tunnel disconnected successfully")
+                    addSshDebugLog("Resetting server address to default (10.0.2.2:3000)")
                     isConnectedViaSSH = false
                     sshTunnelInfo = null
                     callback(true, response.body()?.message ?: "SSH tunnel disconnected")
@@ -301,7 +448,14 @@ object RetrofitClient {
             
             override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
                 addSshDebugLog("SSH disconnection request failed: ${t.message}")
+                addSshDebugLog("Current server address: ${getServerAddress()}")
                 Log.e(TAG, "SSH disconnection failed", t)
+                
+                // Even if the disconnect request fails, let's reset our state
+                addSshDebugLog("Resetting SSH state despite disconnection failure")
+                isConnectedViaSSH = false
+                sshTunnelInfo = null
+                
                 callback(false, "Disconnection failed: ${t.message}")
             }
         })

@@ -130,6 +130,37 @@ fun ServerAddressInput(
                 ) {
                     Text("Edit")
                 }
+                
+                if (isConnectedViaSSH) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Add a test button
+                    Button(
+                        onClick = {
+                            RetrofitClient.addSshDebugLog("Manual connection test requested")
+                            
+                            // Important: If we're supposed to be using 10.0.2.2:3001, make sure the URL is correct
+                            val currentAddress = RetrofitClient.getServerAddress()
+                            RetrofitClient.addSshDebugLog("Current server address: $currentAddress")
+                            
+                            // If we're connected via SSH but not using 10.0.2.2, fix it
+                            if (isConnectedViaSSH && !currentAddress.contains("10.0.2.2")) {
+                                val localPortInt = prefManager.getSshLocalPort()
+                                val correctedAddress = "http://10.0.2.2:$localPortInt/"
+                                RetrofitClient.addSshDebugLog("Fixing address to use 10.0.2.2: $correctedAddress")
+                                RetrofitClient.setServerAddress(correctedAddress)
+                                prefManager.saveServerAddress(correctedAddress)
+                                onAddressChange(correctedAddress)
+                            }
+                            
+                            RetrofitClient.testConnection { success, message ->
+                                RetrofitClient.addSshDebugLog("Connection test: $success - $message")
+                            }
+                        }
+                    ) {
+                        Text("Test")
+                    }
+                }
             }
         }
         
@@ -159,8 +190,27 @@ fun ServerAddressInput(
                 
                 Button(
                     onClick = {
+                        // Before disconnecting, temporarily switch to the SSH server's address
+                        // to ensure the disconnect command goes to the right place
+                        val currentHost = prefManager.getSshHost()
+                        val tempServerAddress = "http://$currentHost:3000/"
+                        
+                        RetrofitClient.addSshDebugLog("Temporarily setting server address to $tempServerAddress for SSH disconnection")
+                        RetrofitClient.setServerAddress(tempServerAddress)
+                        
                         RetrofitClient.disconnectFromSsh { success, message ->
+                            // Regardless of success/failure, we need to reset the address
+                            val defaultAddress = "http://10.0.2.2:3000/"
+                            RetrofitClient.setServerAddress(defaultAddress)
+                            prefManager.saveServerAddress(defaultAddress)
+                            onAddressChange(defaultAddress)
+                            
                             if (success) {
+                                isConnectedViaSSH = false
+                                RetrofitClient.addSshDebugLog("SSH disconnected successfully")
+                            } else {
+                                RetrofitClient.addSshDebugLog("SSH disconnect failed, but we've reset the server address anyway")
+                                // Force reset the SSH status
                                 isConnectedViaSSH = false
                             }
                         }
@@ -237,6 +287,12 @@ fun SshConnectDialog(
     var privateKey by remember { mutableStateOf(prefManager.getSshPrivateKeyPath()) }
     var passphrase by remember { mutableStateOf("") } // We don't save passphrases for security
     var localPort by remember { mutableStateOf(prefManager.getSshLocalPort().toString()) }
+    // Default to port 3001 to avoid conflict with the Node.js server which runs on 3000
+    LaunchedEffect(Unit) {
+        if (localPort == "3000") {
+            localPort = "3001"
+        }
+    }
     var remoteHost by remember { mutableStateOf(prefManager.getSshRemoteHost()) }
     var remotePort by remember { mutableStateOf(prefManager.getSshRemotePort().toString()) }
     var connecting by remember { mutableStateOf(false) }
@@ -505,7 +561,13 @@ fun SshConnectDialog(
                                 )
                                 
                                 // Show connection attempt message
-                                errorMessage = "Attempting to connect..."
+                                errorMessage = "Attempting to connect to SSH server at $host:$portInt..."
+                                RetrofitClient.addSshDebugLog("User initiated SSH connection: $host:$portInt -> $remoteHost:$remotePortInt with port forwarding on local port $localPortInt")
+                                
+                                // First set direct server address (temporary, just for initial connection)
+                                val directServerAddress = "http://$host:3000/"
+                                RetrofitClient.addSshDebugLog("Setting temporary direct server address: $directServerAddress for SSH API connection")
+                                RetrofitClient.setServerAddress(directServerAddress)
                                 
                                 // Try to connect
                                 RetrofitClient.connectToSsh(
@@ -521,9 +583,36 @@ fun SshConnectDialog(
                                 ) { success, message ->
                                     connecting = false
                                     if (success) {
+                                        // Update server address to use IP 10.0.0.2 (localhost equivalent on Android) with the local port
+                                        // because we're tunneling through SSH
+                                        val newServerAddress = "http://10.0.2.2:$localPortInt/"
+                                        RetrofitClient.setServerAddress(newServerAddress)
+                                        prefManager.saveServerAddress(newServerAddress)
+                                        
+                                        // Test the connection through SSH tunnel
+                                        RetrofitClient.addSshDebugLog("Testing SSH tunnel connection to $newServerAddress")
+                                        try {
+                                            // This will test if the tunnel is working by making a request
+                                            RetrofitClient.testConnection { testSuccess, testMessage ->
+                                                if (testSuccess) {
+                                                    RetrofitClient.addSshDebugLog("✅ SSH tunnel connection test successful")
+                                                } else {
+                                                    RetrofitClient.addSshDebugLog("❌ SSH tunnel connection test failed: $testMessage")
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            RetrofitClient.addSshDebugLog("Error testing connection: ${e.message}")
+                                        }
+                                        
                                         onConnect(true)
                                     } else {
-                                        errorMessage = message
+                                        // Improve error messages for SSH authentication issues
+                                        if (message.contains("authentication") || message.contains("auth failed")) {
+                                            errorMessage = "SSH authentication failed. Please check your username and password."
+                                            RetrofitClient.addSshDebugLog("Authentication error details: $message")
+                                        } else {
+                                            errorMessage = message
+                                        }
                                     }
                                 }
                             } catch (e: Exception) {

@@ -76,7 +76,7 @@ class PreferencesManager(context: Context) {
     fun getSshUsername(): String = prefs.getString(KEY_SSH_USERNAME, "") ?: ""
     fun getSshUsePassword(): Boolean = prefs.getBoolean(KEY_SSH_USE_PASSWORD, true)
     fun getSshPrivateKeyPath(): String = prefs.getString(KEY_SSH_PRIVATE_KEY_PATH, "") ?: ""
-    fun getSshLocalPort(): Int = prefs.getInt(KEY_SSH_LOCAL_PORT, 3000)
+    fun getSshLocalPort(): Int = prefs.getInt(KEY_SSH_LOCAL_PORT, 3001)
     fun getSshRemoteHost(): String = prefs.getString(KEY_SSH_REMOTE_HOST, "localhost") ?: "localhost"
     fun getSshRemotePort(): Int = prefs.getInt(KEY_SSH_REMOTE_PORT, 3000)
     
