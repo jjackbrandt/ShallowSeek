@@ -34,8 +34,8 @@ This project combines modern Android development practices with a lightweight ba
 1. **Clone the repository**
 
 ```bash
-git clone <repository-url>
-cd honors-contracting
+git clone https://github.com/jjackbrandt/ShallowSeek/
+cd ShallowSeek
 ```
 
 2. **Server Setup**
@@ -166,5 +166,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - [Ollama](https://ollama.ai/) for making local LLMs accessible
-- [DeepSeek-Coder](https://github.com/deepseek-ai/DeepSeek-Coder) for the excellent LLM models
-- Auburn University for supporting this project
+- [DeepSeek](https://github.com/deepseek-ai/) for the excellent LLM models
+- Auburn & friends for helping
