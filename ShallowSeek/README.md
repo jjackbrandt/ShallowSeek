@@ -50,6 +50,44 @@ The app follows modern Android architecture principles:
 
 For development purposes, the app allows cleartext traffic to the local server. In a production environment, you would want to use HTTPS.
 
+## Roadmap
+
+Here are planned features and improvements for future versions:
+
+### Continuous Chat Feature
+
+A major planned enhancement is implementing a continuous chat feature similar to other LLM applications. This would involve:
+
+1. **Chat History Management**:
+   - Storing messages in a chat history data structure
+   - Implementing a RecyclerView or LazyColumn to display messages with different styles for user and AI
+   - Adding timestamp information to messages
+
+2. **Context Window Management**:
+   - Maintaining conversation context by sending previous messages to the API
+   - Implementing token counting to stay within model context limits
+   - Adding options to clear context or start new conversations
+
+3. **UI Improvements**:
+   - Message bubbles with visual differentiation between user and AI
+   - Typing indicators during generation
+   - Ability to copy individual messages
+   - Support for markdown formatting in responses
+
+4. **Implementation Plan**:
+   - Create a Message data class with fields for content, sender, timestamp
+   - Update MainViewModel to store List<Message> instead of single response
+   - Modify ApiRepository to construct prompts that include conversation history
+   - Create new UI components for chat bubbles and message list
+   - Add storage for persisting conversations between sessions
+
+Other planned features include:
+- Multiple chat sessions/conversations
+- Image generation support
+- Speech-to-text input
+- Local embedding of models
+- Export/import conversation history
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
