@@ -93,6 +93,26 @@ object RetrofitClient {
     private var isConnectedViaSSH = false
     private var sshTunnelInfo: SshTunnelInfo? = null
     
+    // Debug logs for SSH connections
+    private val sshDebugLogs = mutableListOf<String>()
+    
+    /**
+     * Add a debug log message for SSH connections
+     */
+    fun addSshDebugLog(message: String) {
+        sshDebugLogs.add("[${System.currentTimeMillis()}] $message")
+        // Keep only the last 100 log entries
+        if (sshDebugLogs.size > 100) {
+            sshDebugLogs.removeAt(0)
+        }
+        Log.d(TAG, "SSH Debug: $message")
+    }
+    
+    /**
+     * Get all SSH debug logs
+     */
+    fun getSshDebugLogs(): List<String> = sshDebugLogs.toList()
+    
     /**
      * Configure the base URL for the API.
      * 
@@ -209,6 +229,10 @@ object RetrofitClient {
         remotePort: Int,
         callback: (success: Boolean, message: String) -> Unit
     ) {
+        addSshDebugLog("Starting SSH connection to $host:$port with username $username")
+        addSshDebugLog("Using ${if (password != null) "password" else "private key"} authentication")
+        addSshDebugLog("Setting up tunnel: localhost:$localPort -> $remoteHost:$remotePort")
+        
         val request = SshConnectRequest(
             host = host,
             port = port,
@@ -224,16 +248,19 @@ object RetrofitClient {
         getSshApiService().connectSsh(request).enqueue(object : Callback<SshTunnelResponse> {
             override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
                 if (response.isSuccessful && response.body()?.status == "success") {
+                    addSshDebugLog("SSH connection successful: ${response.body()?.message}")
                     isConnectedViaSSH = true
                     sshTunnelInfo = response.body()?.tunnel
                     callback(true, response.body()?.message ?: "SSH tunnel established")
                 } else {
                     val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
+                    addSshDebugLog("SSH connection failed: $errorMsg")
                     callback(false, errorMsg)
                 }
             }
             
             override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
+                addSshDebugLog("SSH connection request failed: ${t.message}")
                 Log.e(TAG, "SSH connection failed", t)
                 callback(false, "Connection failed: ${t.message}")
             }
@@ -260,6 +287,10 @@ object RetrofitClient {
         remotePort: Int,
         callback: (success: Boolean, message: String) -> Unit
     ) {
+        addSshDebugLog("Starting GitHub SSH connection for user $githubUsername")
+        addSshDebugLog("Using SSH key from path: ${sshKeyPath ?: "~/.ssh/id_rsa (default)"}")
+        addSshDebugLog("Setting up tunnel: localhost:$localPort -> $remoteHost:$remotePort")
+        
         val request = GithubSshRequest(
             githubUsername = githubUsername,
             sshKeyPath = sshKeyPath,
@@ -272,16 +303,19 @@ object RetrofitClient {
         getSshApiService().connectGithubSsh(request).enqueue(object : Callback<SshTunnelResponse> {
             override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
                 if (response.isSuccessful && response.body()?.status == "success") {
+                    addSshDebugLog("GitHub SSH connection successful: ${response.body()?.message}")
                     isConnectedViaSSH = true
                     sshTunnelInfo = response.body()?.tunnel
                     callback(true, response.body()?.message ?: "GitHub SSH tunnel established")
                 } else {
                     val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
+                    addSshDebugLog("GitHub SSH connection failed: $errorMsg")
                     callback(false, errorMsg)
                 }
             }
             
             override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
+                addSshDebugLog("GitHub SSH connection request failed: ${t.message}")
                 Log.e(TAG, "GitHub SSH connection failed", t)
                 callback(false, "Connection failed: ${t.message}")
             }
@@ -294,19 +328,24 @@ object RetrofitClient {
      * @param callback Callback for success/failure
      */
     fun disconnectFromSsh(callback: (success: Boolean, message: String) -> Unit) {
+        addSshDebugLog("Disconnecting SSH tunnel...")
+        
         getSshApiService().disconnectSsh().enqueue(object : Callback<SshTunnelResponse> {
             override fun onResponse(call: Call<SshTunnelResponse>, response: Response<SshTunnelResponse>) {
                 if (response.isSuccessful) {
+                    addSshDebugLog("SSH tunnel disconnected successfully")
                     isConnectedViaSSH = false
                     sshTunnelInfo = null
                     callback(true, response.body()?.message ?: "SSH tunnel disconnected")
                 } else {
                     val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Unknown error"
+                    addSshDebugLog("SSH disconnection failed: $errorMsg")
                     callback(false, errorMsg)
                 }
             }
             
             override fun onFailure(call: Call<SshTunnelResponse>, t: Throwable) {
+                addSshDebugLog("SSH disconnection request failed: ${t.message}")
                 Log.e(TAG, "SSH disconnection failed", t)
                 callback(false, "Disconnection failed: ${t.message}")
             }

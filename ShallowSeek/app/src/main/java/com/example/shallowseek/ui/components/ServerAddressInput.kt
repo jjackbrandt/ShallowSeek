@@ -27,17 +27,20 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.shallowseek.network.RetrofitClient
+import com.example.shallowseek.util.PreferencesManager
 
 /**
  * A composable that displays server configuration options including SSH tunneling.
@@ -52,11 +55,20 @@ fun ServerAddressInput(
     onAddressChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val prefManager = remember { PreferencesManager.getInstance(context) }
+    
     var address by remember { mutableStateOf(currentAddress) }
     var isEditMode by remember { mutableStateOf(false) }
     var showSshOptions by remember { mutableStateOf(false) }
     var expandSshSection by remember { mutableStateOf(false) }
     var isConnectedViaSSH by remember { mutableStateOf(RetrofitClient.isConnectedViaSSH()) }
+    
+    // Initialize with saved server address
+    LaunchedEffect(Unit) {
+        address = prefManager.getServerAddress()
+        onAddressChange(address)
+    }
     
     Column(
         modifier = modifier
@@ -89,6 +101,8 @@ fun ServerAddressInput(
                 Button(
                     onClick = {
                         if (address.isNotBlank()) {
+                            // Save to preferences
+                            prefManager.saveServerAddress(address)
                             onAddressChange(address)
                             isEditMode = false
                         }
@@ -237,18 +251,22 @@ fun SshConnectDialog(
     onDismiss: () -> Unit,
     onConnect: (Boolean) -> Unit
 ) {
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("22") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var usePassword by remember { mutableStateOf(true) }
-    var privateKey by remember { mutableStateOf("") }
-    var passphrase by remember { mutableStateOf("") }
-    var localPort by remember { mutableStateOf("3000") }
-    var remoteHost by remember { mutableStateOf("localhost") }
-    var remotePort by remember { mutableStateOf("3000") }
+    val context = LocalContext.current
+    val prefManager = remember { PreferencesManager.getInstance(context) }
+    
+    var host by remember { mutableStateOf(prefManager.getSshHost()) }
+    var port by remember { mutableStateOf(prefManager.getSshPort().toString()) }
+    var username by remember { mutableStateOf(prefManager.getSshUsername()) }
+    var password by remember { mutableStateOf("") } // We don't save passwords for security
+    var usePassword by remember { mutableStateOf(prefManager.getSshUsePassword()) }
+    var privateKey by remember { mutableStateOf(prefManager.getSshPrivateKeyPath()) }
+    var passphrase by remember { mutableStateOf("") } // We don't save passphrases for security
+    var localPort by remember { mutableStateOf(prefManager.getSshLocalPort().toString()) }
+    var remoteHost by remember { mutableStateOf(prefManager.getSshRemoteHost()) }
+    var remotePort by remember { mutableStateOf(prefManager.getSshRemotePort().toString()) }
     var connecting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var showDebugLogs by remember { mutableStateOf(false) }
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -399,6 +417,33 @@ fun SshConnectDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // Advanced section
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Advanced",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    Button(
+                        onClick = { showDebugLogs = true },
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Text("Debug Logs")
+                    }
+                }
+                
+                if (showDebugLogs) {
+                    SshDebugDialog(onDismiss = { showDebugLogs = false })
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 // Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -418,16 +463,32 @@ fun SshConnectDialog(
                             connecting = true
                             errorMessage = ""
                             
+                            // Save settings to preferences
+                            val portInt = port.toIntOrNull() ?: 22
+                            val localPortInt = localPort.toIntOrNull() ?: 3000
+                            val remotePortInt = remotePort.toIntOrNull() ?: 3000
+                            
+                            prefManager.saveSshSettings(
+                                host = host,
+                                port = portInt,
+                                username = username,
+                                usePassword = usePassword,
+                                privateKeyPath = privateKey,
+                                localPort = localPortInt,
+                                remoteHost = remoteHost,
+                                remotePort = remotePortInt
+                            )
+                            
                             RetrofitClient.connectToSsh(
                                 host = host,
-                                port = port.toIntOrNull() ?: 22,
+                                port = portInt,
                                 username = username,
                                 password = if (usePassword) password else null,
                                 privateKey = if (!usePassword) privateKey else null,
                                 passphrase = if (!usePassword) passphrase else null,
-                                localPort = localPort.toIntOrNull() ?: 3000,
+                                localPort = localPortInt,
                                 remoteHost = remoteHost,
-                                remotePort = remotePort.toIntOrNull() ?: 3000
+                                remotePort = remotePortInt
                             ) { success, message ->
                                 connecting = false
                                 if (success) {
@@ -450,6 +511,68 @@ fun SshConnectDialog(
 }
 
 /**
+ * Dialog for SSH debug logs.
+ */
+@Composable
+fun SshDebugDialog(
+    onDismiss: () -> Unit
+) {
+    val logs = RetrofitClient.getSshDebugLogs()
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "SSH Debug Logs",
+                    style = MaterialTheme.typography.titleLarge
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (logs.isEmpty()) {
+                    Text(
+                        text = "No SSH debug logs available.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(8.dp)
+                    ) {
+                        logs.forEach { log ->
+                            Text(
+                                text = log,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+/**
  * Dialog for GitHub SSH connection configuration.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -458,14 +581,18 @@ fun GithubSshDialog(
     onDismiss: () -> Unit,
     onConnect: (Boolean) -> Unit
 ) {
-    var githubUsername by remember { mutableStateOf("") }
-    var sshKeyPath by remember { mutableStateOf("~/.ssh/id_rsa") }
-    var passphrase by remember { mutableStateOf("") }
-    var localPort by remember { mutableStateOf("3000") }
-    var remoteHost by remember { mutableStateOf("localhost") }
-    var remotePort by remember { mutableStateOf("3000") }
+    val context = LocalContext.current
+    val prefManager = remember { PreferencesManager.getInstance(context) }
+    
+    var githubUsername by remember { mutableStateOf(prefManager.getGithubUsername()) }
+    var sshKeyPath by remember { mutableStateOf(prefManager.getGithubSshKeyPath()) }
+    var passphrase by remember { mutableStateOf("") } // We don't save passphrases for security
+    var localPort by remember { mutableStateOf(prefManager.getGithubLocalPort().toString()) }
+    var remoteHost by remember { mutableStateOf(prefManager.getGithubRemoteHost()) }
+    var remotePort by remember { mutableStateOf(prefManager.getGithubRemotePort().toString()) }
     var connecting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var showDebugLogs by remember { mutableStateOf(false) }
     
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -569,6 +696,33 @@ fun GithubSshDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // Advanced section
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Advanced",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    Button(
+                        onClick = { showDebugLogs = true },
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Text("Debug Logs")
+                    }
+                }
+                
+                if (showDebugLogs) {
+                    SshDebugDialog(onDismiss = { showDebugLogs = false })
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
                 // Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -588,13 +742,25 @@ fun GithubSshDialog(
                             connecting = true
                             errorMessage = ""
                             
+                            // Save settings to preferences
+                            val localPortInt = localPort.toIntOrNull() ?: 3000
+                            val remotePortInt = remotePort.toIntOrNull() ?: 3000
+                            
+                            prefManager.saveGithubSshSettings(
+                                username = githubUsername,
+                                sshKeyPath = sshKeyPath,
+                                localPort = localPortInt,
+                                remoteHost = remoteHost,
+                                remotePort = remotePortInt
+                            )
+                            
                             RetrofitClient.connectToGithubSsh(
                                 githubUsername = githubUsername,
                                 sshKeyPath = sshKeyPath,
                                 passphrase = passphrase,
-                                localPort = localPort.toIntOrNull() ?: 3000,
+                                localPort = localPortInt,
                                 remoteHost = remoteHost,
-                                remotePort = remotePort.toIntOrNull() ?: 3000
+                                remotePort = remotePortInt
                             ) { success, message ->
                                 connecting = false
                                 if (success) {

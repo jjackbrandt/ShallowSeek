@@ -31,9 +31,10 @@ class MainActivity : ComponentActivity() {
             val viewModel: MainViewModel = viewModel()
             val context = LocalContext.current
             
-            // Load saved theme on first composition
+            // Load saved preferences on first composition
             DisposableEffect(Unit) {
                 viewModel.loadThemePreference(context)
+                viewModel.initServerAddressFromPreferences(context)
                 onDispose { }
             }
             

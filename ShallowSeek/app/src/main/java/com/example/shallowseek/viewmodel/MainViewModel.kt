@@ -202,6 +202,17 @@ class MainViewModel : ViewModel() {
     }
     
     /**
+     * Initialize server address from preferences
+     */
+    fun initServerAddressFromPreferences(context: Context) {
+        val prefsManager = com.example.shallowseek.util.PreferencesManager.getInstance(context)
+        val savedAddress = prefsManager.getServerAddress()
+        if (savedAddress.isNotEmpty()) {
+            updateServerAddress(savedAddress)
+        }
+    }
+    
+    /**
      * Clear the current conversation.
      */
     fun clearConversation() {
