@@ -43,20 +43,34 @@ fi
 # Check if Ollama is running
 echo -e "${YELLOW}Checking if Ollama is running...${NC}"
 if ! curl -s http://localhost:11434/api/tags &> /dev/null; then
-    echo -e "${YELLOW}Starting Ollama...${NC}"
-    open -a Ollama
+    echo -e "${YELLOW}Ollama is not running. Attempting to start it...${NC}"
+    
+    # Try different methods to start Ollama
+    if [ -d "/Applications/Ollama.app" ]; then
+        # Try using open command if the app is in Applications
+        echo -e "Found Ollama.app in Applications, launching..."
+        open /Applications/Ollama.app
+    elif command_exists ollama; then
+        # Try starting Ollama using the CLI if installed
+        echo -e "Starting Ollama using CLI..."
+        ollama serve &>/dev/null &
+    else
+        echo -e "${RED}Could not find a way to start Ollama automatically.${NC}"
+        echo -e "${YELLOW}Please start Ollama manually and then press Enter to continue...${NC}"
+        read -r
+    fi
 
     # Wait for Ollama to start
     echo -e "Waiting for Ollama to initialize..."
-    for i in {1..30}; do
+    for i in {1..45}; do
         if curl -s http://localhost:11434/api/tags &> /dev/null; then
             echo -e "${GREEN}Ollama is now running!${NC}"
             break
         fi
 
-        if [ $i -eq 30 ]; then
+        if [ $i -eq 45 ]; then
             echo -e "${RED}Timed out waiting for Ollama to start.${NC}"
-            echo -e "Please start Ollama manually and try again."
+            echo -e "Please ensure Ollama is installed and running manually, then try again."
             exit 1
         fi
 
@@ -131,7 +145,12 @@ echo -e "   ${CYAN}cd \"$(dirname "$0")/ShallowSeek\"${NC}"
 echo -e "   ${CYAN}open -a \"Android Studio\" .${NC}"
 echo -e "2. Build and run the app on your device or emulator"
 echo -e "3. If using an emulator, the server address should be ${CYAN}http://10.0.2.2:3000/${NC}"
-echo -e "4. If using a physical device, update the server address to ${CYAN}http://<your-computer-ip>:3000/${NC}\n"
+echo -e "4. If using a physical device on the same network, update the server address to ${CYAN}http://<your-computer-ip>:3000/${NC}"
+echo -e "5. If using a physical device remotely, you can use SSH tunneling:"
+echo -e "   - In the app, tap the arrow next to 'SSH Tunnel'"
+echo -e "   - Choose 'Connect via SSH' or 'Connect via GitHub SSH'"
+echo -e "   - Enter your SSH credentials and configure port forwarding"
+echo -e "   - The server will be accessible securely through the SSH tunnel\n"
 
 echo -e "${YELLOW}Server logs:${NC}"
 echo -e "${CYAN}(Press Ctrl+C to stop the server)${NC}\n"
