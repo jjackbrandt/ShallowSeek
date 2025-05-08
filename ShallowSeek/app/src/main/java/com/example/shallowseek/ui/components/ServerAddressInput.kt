@@ -139,18 +139,23 @@ fun ServerAddressInput(
                         onClick = {
                             RetrofitClient.addSshDebugLog("Manual connection test requested")
                             
-                            // Important: If we're supposed to be using 10.0.2.2:3001, make sure the URL is correct
+                            // Get current device type and ensure correct localhost is used
                             val currentAddress = RetrofitClient.getServerAddress()
                             RetrofitClient.addSshDebugLog("Current server address: $currentAddress")
                             
-                            // If we're connected via SSH but not using 10.0.2.2, fix it
-                            if (isConnectedViaSSH && !currentAddress.contains("10.0.2.2")) {
+                            // Fix if wrong host is being used
+                            if (isConnectedViaSSH) {
                                 val localPortInt = prefManager.getSshLocalPort()
-                                val correctedAddress = "http://10.0.2.2:$localPortInt/"
-                                RetrofitClient.addSshDebugLog("Fixing address to use 10.0.2.2: $correctedAddress")
-                                RetrofitClient.setServerAddress(correctedAddress)
-                                prefManager.saveServerAddress(correctedAddress)
-                                onAddressChange(correctedAddress)
+                                val localhost = RetrofitClient.getLocalhostEquivalent()
+                                
+                                // Only update if needed
+                                if (!currentAddress.contains(localhost)) {
+                                    val correctedAddress = "http://$localhost:$localPortInt/"
+                                    RetrofitClient.addSshDebugLog("Fixing address to use $localhost: $correctedAddress")
+                                    RetrofitClient.setServerAddress(correctedAddress)
+                                    prefManager.saveServerAddress(correctedAddress)
+                                    onAddressChange(correctedAddress)
+                                }
                             }
                             
                             RetrofitClient.testConnection { success, message ->
@@ -200,7 +205,8 @@ fun ServerAddressInput(
                         
                         RetrofitClient.disconnectFromSsh { success, message ->
                             // Regardless of success/failure, we need to reset the address
-                            val defaultAddress = "http://10.0.2.2:3000/"
+                            val localhost = RetrofitClient.getLocalhostEquivalent()
+                            val defaultAddress = "http://$localhost:3000/"
                             RetrofitClient.setServerAddress(defaultAddress)
                             prefManager.saveServerAddress(defaultAddress)
                             onAddressChange(defaultAddress)
@@ -584,9 +590,9 @@ fun SshConnectDialog(
                                 ) { success, message ->
                                     connecting = false
                                     if (success) {
-                                        // Update server address to use IP 10.0.2.2 (localhost equivalent on Android) with the local port
-                                        // because we're tunneling through SSH
-                                        val newServerAddress = "http://10.0.2.2:$localPortInt/"
+                                        // Set correct host based on device type
+                                        val localhost = RetrofitClient.getLocalhostEquivalent()
+                                        val newServerAddress = "http://$localhost:$localPortInt/"
                                         RetrofitClient.setServerAddress(newServerAddress)
                                         prefManager.saveServerAddress(newServerAddress)
                                         

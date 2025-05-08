@@ -44,7 +44,20 @@ class PreferencesManager(context: Context) {
     }
     
     fun getServerAddress(): String {
-        return prefs.getString(KEY_SERVER_ADDRESS, "http://10.0.2.2:3000/") ?: "http://10.0.2.2:3000/"
+        // Get default server address, correcting for device type if needed
+        val defaultHost = if (isEmulator()) "10.0.2.2" else "localhost" 
+        val defaultAddress = "http://$defaultHost:3000/"
+        return prefs.getString(KEY_SERVER_ADDRESS, defaultAddress) ?: defaultAddress
+    }
+    
+    // Check if we're on an emulator
+    private fun isEmulator(): Boolean {
+        return android.os.Build.MODEL.contains("sdk") || 
+               android.os.Build.MODEL.contains("Emulator") ||
+               android.os.Build.MODEL.contains("Android SDK") ||
+               android.os.Build.PRODUCT.contains("sdk") ||
+               android.os.Build.HARDWARE.contains("goldfish") ||
+               android.os.Build.HARDWARE.contains("ranchu")
     }
     
     // Standard SSH settings

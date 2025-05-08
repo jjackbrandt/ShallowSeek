@@ -174,6 +174,28 @@ object RetrofitClient {
             .build()
     }
     
+    // Device type detection for correct host handling
+    private fun isEmulator(): Boolean {
+        return android.os.Build.MODEL.contains("sdk") || 
+               android.os.Build.MODEL.contains("Emulator") ||
+               android.os.Build.MODEL.contains("Android SDK") ||
+               android.os.Build.PRODUCT.contains("sdk") ||
+               android.os.Build.HARDWARE.contains("goldfish") ||
+               android.os.Build.HARDWARE.contains("ranchu")
+    }
+    
+    // Helper to get correct localhost equivalent based on device type
+    fun getLocalhostEquivalent(): String {
+        addSshDebugLog("Device info - Model: ${android.os.Build.MODEL}, Product: ${android.os.Build.PRODUCT}")
+        return if (isEmulator()) {
+            addSshDebugLog("Detected emulator - using 10.0.2.2 for localhost")
+            "10.0.2.2"
+        } else {
+            addSshDebugLog("Detected physical device - using localhost")
+            "localhost"
+        }
+    }
+    
     // Get a fresh Retrofit instance with the current BASE_URL
     private val retrofit: Retrofit
         get() = Retrofit.Builder()
@@ -237,15 +259,24 @@ object RetrofitClient {
     fun testConnection(callback: (success: Boolean, message: String) -> Unit) {
         addSshDebugLog("Testing connection to $BASE_URL...")
         
-        // CRITICAL FIX: Always replace localhost with 10.0.2.2 on Android emulator
-        if (BASE_URL.contains("localhost") && !BASE_URL.contains("10.0.2.2")) {
+        // Get correct localhost equivalent for this device
+        val correctLocalhost = getLocalhostEquivalent()
+        
+        // Fix the URL if needed
+        val shouldUse10_0_2_2 = isEmulator() && BASE_URL.contains("localhost")
+        val shouldUseLocalhost = !isEmulator() && BASE_URL.contains("10.0.2.2")
+        
+        if (shouldUse10_0_2_2 || shouldUseLocalhost) {
             // Extract port from current URL
-            val portRegex = "localhost:(\\d+)".toRegex()
+            val pattern = if (shouldUse10_0_2_2) "localhost:(\\d+)" else "10.0.2.2:(\\d+)" 
+            val portRegex = pattern.toRegex()
             val portMatch = portRegex.find(BASE_URL)
             val port = portMatch?.groupValues?.get(1) ?: "3001"
             
-            val correctedUrl = BASE_URL.replace("localhost", "10.0.2.2")
-            addSshDebugLog("⚠️ LOCALHOST FIX: Changing $BASE_URL to $correctedUrl for Android emulator compatibility")
+            val wrongHost = if (shouldUse10_0_2_2) "localhost" else "10.0.2.2"
+            val correctedUrl = BASE_URL.replace(wrongHost, correctLocalhost)
+            
+            addSshDebugLog("⚠️ DEVICE FIX: Changing $BASE_URL to $correctedUrl for device compatibility")
             
             // Actually update the URL
             BASE_URL = correctedUrl
